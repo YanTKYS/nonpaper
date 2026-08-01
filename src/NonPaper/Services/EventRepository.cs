@@ -104,6 +104,22 @@ public sealed class EventRepository : IEventRepository
         finally { gate.Release(); }
     }
 
+    public async Task<TResult> UpdateAsync<TResult>(string eventId, Func<EventRecord, TResult> update, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        ValidateId(eventId);
+        var gate = Locks.GetOrAdd(eventId, _ => new(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            var value = await ReadAsync(eventId, ct) ?? throw new KeyNotFoundException();
+            var result = update(value);
+            await WriteAsync(value, ct);
+            return result;
+        }
+        finally { gate.Release(); }
+    }
+
     public async Task DeleteDirectoryAsync(string eventId, CancellationToken ct = default)
     {
         await DeleteDirectoryCoreAsync(eventId, null, ct);
@@ -131,17 +147,7 @@ public sealed class EventRepository : IEventRepository
         ValidateId(eventId);
         var gate = Locks.GetOrAdd(eventId, _ => new(1, 1));
         await gate.WaitAsync(ct);
-        try
-        {
-            if (beforeDelete is not null)
-            {
-                var value = await ReadAsync(eventId, ct) ?? throw new KeyNotFoundException();
-                beforeDelete(value);
-                await WriteAsync(value, ct);
-            }
-
-            if (Directory.Exists(EventDirectory(eventId))) Directory.Delete(EventDirectory(eventId), true);
-        }
+        try { if (Directory.Exists(EventDirectory(eventId))) Directory.Delete(EventDirectory(eventId), true); }
         finally { gate.Release(); }
     }
 

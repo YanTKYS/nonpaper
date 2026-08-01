@@ -35,4 +35,30 @@ public sealed class EventService(IEventRepository repository, IConfiguration con
         if (!TokenMatches(e, token)) throw new UnauthorizedAccessException();
         return e;
     }
+
+    public Task<EventRecord> UpdateAuthorizedAsync(string id, string? token, Action<EventRecord> update, CancellationToken ct) =>
+        repository.UpdateAsync(id, value =>
+        {
+            if (!TokenMatches(value, token)) throw new UnauthorizedAccessException();
+            update(value);
+        }, ct);
+
+    public Task<EventRecord> ChangeStatusAsync(string id, string? token, string next, CancellationToken ct) =>
+        UpdateAuthorizedAsync(id, token, value =>
+        {
+            var error = EventStatusTransitions.Validate(value.Status, next);
+            if (error is not null) throw new EventStateConflictException(error);
+            value.Status = next;
+            value.UpdatedAt = DateTimeOffset.Now;
+        }, ct);
+
+    public async Task DeleteAuthorizedAsync(string id, string? token, CancellationToken ct)
+    {
+        await UpdateAuthorizedAsync(id, token, value =>
+        {
+            value.Status = "deleting";
+            value.UpdatedAt = DateTimeOffset.Now;
+        }, ct);
+        await repository.DeleteAsync(id, ct);
+    }
 }

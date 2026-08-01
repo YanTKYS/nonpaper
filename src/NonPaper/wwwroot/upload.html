@@ -1,1 +1,32 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PDF登録 - NonPaper</title><link rel="stylesheet" href="css/site.css"></head><body><header class="organizer"><h1>PDF資料登録（主催者用）</h1></header><main><div id="message" class="hidden" role="alert"></div><section class="card"><a id="back" class="button secondary">イベント管理へ戻る</a><h2>PDFを登録</h2><div id="drop" class="drop"><p>PDFをここへドラッグ＆ドロップ、または選択してください</p><input id="files" type="file" accept="application/pdf,.pdf" multiple><button id="send">アップロード</button><p id="progress" aria-live="polite"></p></div></section><section class="card"><h2>登録済み資料</h2><div id="documents"></div></section></main><script type="module" src="js/upload.js"></script></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>PDF登録 - NonPaper</title>
+  <link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+  <header class="organizer">
+    <h1>PDF資料登録（主催者用）</h1>
+  </header>
+  <main>
+    <div id="message" class="hidden" role="alert"></div>
+    <section class="card">
+      <a id="back" class="button secondary">イベント管理へ戻る</a>
+      <h2>PDFを登録</h2>
+      <div id="drop" class="drop">
+        <p>PDFをここへドラッグ＆ドロップ、または選択してください</p>
+        <input id="files" type="file" accept="application/pdf,.pdf" multiple>
+        <button id="send">アップロード</button>
+        <p id="progress" aria-live="polite"></p>
+      </div>
+    </section>
+    <section class="card">
+      <h2>登録済み資料</h2>
+      <div id="documents"></div>
+    </section>
+  </main>
+  <script type="module" src="js/upload.js"></script>
+</body>
+</html>

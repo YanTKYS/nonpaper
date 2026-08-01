@@ -1,8 +1,86 @@
 import { api, eventId, localDate, showError } from './common.js';
-let data; let documentId; let pageNumber=1; let zoom=100;
-function source(){return `/api/events/${encodeURIComponent(eventId)}/documents/${encodeURIComponent(documentId)}/content#page=${pageNumber}&zoom=${zoom}&toolbar=0&navpanes=0`;}
-function refresh(){if(documentId)pdf.src=source();page.value=pageNumber;}
-async function load(){try{data=await api(`/api/events/${eventId}`);title.textContent=data.title;description.textContent=data.description||'（説明なし）';dates.textContent=`${localDate(data.startsAt)} ～ ${localDate(data.endsAt)}`;documents.replaceChildren();data.documents.forEach((doc,index)=>{const b=document.createElement('button');b.className='document-button';b.textContent=doc.title;b.addEventListener('click',()=>select(doc,b));documents.append(b);if(index===0)select(doc,b)});if(!data.documents.length)viewer.textContent='登録されている資料はありません。';meeting.classList.remove('hidden');}catch(e){meeting.classList.add('hidden');showError(e);}}
-function select(doc,button){documentId=doc.id;pageNumber=1;selected.textContent=doc.title;document.querySelectorAll('.document-button').forEach(x=>x.classList.remove('active'));button.classList.add('active');refresh();}
-previous.addEventListener('click',()=>{pageNumber=Math.max(1,pageNumber-1);refresh()});next.addEventListener('click',()=>{pageNumber++;refresh()});page.addEventListener('change',()=>{pageNumber=Math.max(1,Number(page.value)||1);refresh()});zoomIn.addEventListener('click',()=>{zoom=Math.min(300,zoom+25);refresh()});zoomOut.addEventListener('click',()=>{zoom=Math.max(25,zoom-25);refresh()});fit.addEventListener('click',()=>{zoom='page-width';refresh()});fullscreen.addEventListener('click',()=>viewer.requestFullscreen());
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='p'){e.preventDefault();showError(new Error('この画面では印刷機能を提供していません。'));}if(e.key==='ArrowRight')next.click();if(e.key==='ArrowLeft')previous.click();});document.addEventListener('contextmenu',e=>e.preventDefault());load();setInterval(load,30000);
+
+let data;
+let documentId;
+let pageNumber = 1;
+let zoom = 100;
+
+function source() {
+  return `/api/events/${encodeURIComponent(eventId)}/documents/${encodeURIComponent(documentId)}/content#page=${pageNumber}&zoom=${zoom}&toolbar=0&navpanes=0`;
+}
+
+function refresh() {
+  if (documentId) pdf.src = source();
+  page.value = pageNumber;
+}
+
+async function load() {
+  try {
+    data = await api(`/api/events/${eventId}`);
+    title.textContent = data.title;
+    description.textContent = data.description || '（説明なし）';
+    dates.textContent = `${localDate(data.startsAt)} ～ ${localDate(data.endsAt)}`;
+    documents.replaceChildren();
+    data.documents.forEach((doc, index) => {
+      const b = document.createElement('button');
+      b.className = 'document-button';
+      b.textContent = doc.title;
+      b.addEventListener('click', () => select(doc, b));
+      documents.append(b);
+      if (index === 0) select(doc, b);
+    });
+    if (!data.documents.length) viewer.textContent = '登録されている資料はありません。';
+    meeting.classList.remove('hidden');
+  } catch (e) {
+    meeting.classList.add('hidden');
+    showError(e);
+  }
+}
+
+function select(doc, button) {
+  documentId = doc.id;
+  pageNumber = 1;
+  selected.textContent = doc.title;
+  document.querySelectorAll('.document-button').forEach(x => x.classList.remove('active'));
+  button.classList.add('active');
+  refresh();
+}
+
+previous.addEventListener('click', () => {
+  pageNumber = Math.max(1, pageNumber - 1);
+  refresh();
+});
+next.addEventListener('click', () => {
+  pageNumber++;
+  refresh();
+});
+page.addEventListener('change', () => {
+  pageNumber = Math.max(1, Number(page.value) || 1);
+  refresh();
+});
+zoomIn.addEventListener('click', () => {
+  zoom = Math.min(300, zoom + 25);
+  refresh();
+});
+zoomOut.addEventListener('click', () => {
+  zoom = Math.max(25, zoom - 25);
+  refresh();
+});
+fit.addEventListener('click', () => {
+  zoom = 'page-width';
+  refresh();
+});
+fullscreen.addEventListener('click', () => viewer.requestFullscreen());
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+    e.preventDefault();
+    showError(new Error('この画面では印刷機能を提供していません。'));
+  }
+  if (e.key === 'ArrowRight') next.click();
+  if (e.key === 'ArrowLeft') previous.click();
+});
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+load();
+setInterval(load, 30000);

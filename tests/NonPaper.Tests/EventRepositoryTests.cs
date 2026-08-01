@@ -49,7 +49,7 @@ public sealed class EventRepositoryTests : IDisposable
 
     [Fact] public async Task Delete_RemovesJsonPdfAndFolder()
     {
-        var repository=Repository;var value=Event();await repository.SaveAsync(value);await File.WriteAllTextAsync(repository.DocumentPath(value.Id,EventService.NewId()),"pdf");await repository.DeleteAsync(value.Id);Assert.False(Directory.Exists(Path.Combine(root,value.Id)));
+        var repository=Repository;var value=Event();await repository.SaveAsync(value);await File.WriteAllTextAsync(repository.DocumentPath(value.Id,EventService.NewId()),"pdf");await repository.DeleteDirectoryAsync(value.Id);Assert.False(Directory.Exists(Path.Combine(root,value.Id)));
     }
 
     [Fact] public void ManagementToken_UsesHashAndConstantTimeComparison()
@@ -149,6 +149,7 @@ public sealed class EventRepositoryTests : IDisposable
         NullLogger<EventService>.Instance);
 
     private static EventRecord Event()=>new(){Id=EventService.NewId(),Title="庁内会議",StartsAt=DateTimeOffset.Now,EndsAt=DateTimeOffset.Now.AddHours(1),CreatedAt=DateTimeOffset.Now,UpdatedAt=DateTimeOffset.Now,ManagementTokenHash=EventService.HashToken("test")};
+    private static DocumentRecord Document(int number) => new() { Id = number.ToString("x32"), Title = $"資料{number}", OriginalFileName = $"{number}.pdf", StoredFileName = $"{number:x32}.pdf", Order = number + 1, FileSize = 5, UploadedAt = DateTimeOffset.Now };
     public void Dispose(){if(Directory.Exists(root))Directory.Delete(root,true);}
     private sealed class Environment(string path):IWebHostEnvironment { public string ApplicationName{get;set;}="Tests";public IFileProvider WebRootFileProvider{get;set;}=new NullFileProvider();public string WebRootPath{get;set;}=path;public string EnvironmentName{get;set;}="Development";public string ContentRootPath{get;set;}=path;public IFileProvider ContentRootFileProvider{get;set;}=new NullFileProvider(); }
 }

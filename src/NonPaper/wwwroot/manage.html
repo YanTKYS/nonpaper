@@ -1,1 +1,44 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>イベント管理 - NonPaper</title><link rel="stylesheet" href="css/site.css"></head><body><header class="organizer"><h1>イベント管理（主催者用）</h1></header><main><div id="message" class="hidden" role="alert"></div><section id="details" class="card hidden"><h2 id="title"></h2><p id="description"></p><dl><dt>開催日時</dt><dd id="dates"></dd><dt>現在の状態</dt><dd><span id="status" class="badge"></span><p id="statusDescription"></p></dd><dt>登録済み資料数</dt><dd id="count"></dd></dl><a id="upload" class="button" href="#">PDF登録画面へ</a><button id="copyMeeting" class="secondary">参加者用URLをコピー</button><hr><button data-status="published">公開する</button><button data-status="draft" class="secondary">下書きに戻す</button><button data-status="closed" class="secondary">会議を終了する</button></section><section id="danger" class="card danger-zone hidden"><h2>危険な操作</h2><p>イベント「<strong id="deleteTitle"></strong>」と登録PDFを完全に削除します。</p><button id="delete" class="danger">イベントを削除</button></section></main><script type="module" src="js/manage.js"></script></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>イベント管理 - NonPaper</title>
+  <link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+  <header class="organizer">
+    <h1>イベント管理（主催者用）</h1>
+  </header>
+  <main>
+    <div id="message" class="hidden" role="alert"></div>
+    <section id="details" class="card hidden">
+      <h2 id="title"></h2>
+      <p id="description"></p>
+      <dl>
+        <dt>開催日時</dt>
+        <dd id="dates"></dd>
+        <dt>現在の状態</dt>
+        <dd>
+          <span id="status" class="badge"></span>
+          <p id="statusDescription"></p>
+        </dd>
+        <dt>登録済み資料数</dt>
+        <dd id="count"></dd>
+      </dl>
+      <a id="upload" class="button" href="#">PDF登録画面へ</a>
+      <button id="copyMeeting" class="secondary">参加者用URLをコピー</button>
+      <hr>
+      <button data-status="published">公開する</button>
+      <button data-status="draft" class="secondary">下書きに戻す</button>
+      <button data-status="closed" class="secondary">会議を終了する</button>
+    </section>
+    <section id="danger" class="card danger-zone hidden">
+      <h2>危険な操作</h2>
+      <p>イベント「<strong id="deleteTitle"></strong>」と登録PDFを完全に削除します。</p>
+      <button id="delete" class="danger">イベントを削除</button>
+    </section>
+  </main>
+  <script type="module" src="js/manage.js"></script>
+</body>
+</html>

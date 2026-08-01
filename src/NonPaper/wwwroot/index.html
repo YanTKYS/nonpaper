@@ -1,1 +1,50 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>NonPaper - 会議作成</title><link rel="stylesheet" href="css/site.css"></head><body><header><h1>NonPaper</h1><p>簡易ペーパーレス会議システム</p></header><main><section class="card"><h2>会議イベントを作成</h2><div id="message" class="hidden" role="alert"></div><form id="create"><label for="title">会議名</label><input id="title" maxlength="200" required><label for="description">説明</label><textarea id="description" maxlength="4000" rows="4"></textarea><div class="row"><div><label for="starts">開催日時</label><input id="starts" type="datetime-local" required></div><div><label for="ends">終了日時</label><input id="ends" type="datetime-local" required></div></div><button>イベントを作成</button></form></section><section id="result" class="card hidden"><h2>作成しました</h2><p class="error">管理用URLはこの画面で一度だけ表示されます。秘密情報として安全に保管してください。</p><h3>管理用URL</h3><p id="manageUrl" class="url"></p><button data-copy="manageUrl">コピー</button><a id="uploadLink" class="button" href="#">PDF登録画面へ</a><h3>参加者用URL</h3><p id="meetingUrl" class="url"></p><button data-copy="meetingUrl">コピー</button></section></main><script type="module" src="js/index.js"></script></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>NonPaper - 会議作成</title>
+  <link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+  <header>
+    <h1>NonPaper</h1>
+    <p>簡易ペーパーレス会議システム</p>
+  </header>
+  <main>
+    <section class="card">
+      <h2>会議イベントを作成</h2>
+      <div id="message" class="hidden" role="alert"></div>
+      <form id="create">
+        <label for="title">会議名</label>
+        <input id="title" maxlength="200" required>
+        <label for="description">説明</label>
+        <textarea id="description" maxlength="4000" rows="4"></textarea>
+        <div class="row">
+          <div>
+            <label for="starts">開催日時</label>
+            <input id="starts" type="datetime-local" required>
+          </div>
+          <div>
+            <label for="ends">終了日時</label>
+            <input id="ends" type="datetime-local" required>
+          </div>
+        </div>
+        <button>イベントを作成</button>
+      </form>
+    </section>
+    <section id="result" class="card hidden">
+      <h2>作成しました</h2>
+      <p class="error">管理用URLはこの画面で一度だけ表示されます。秘密情報として安全に保管してください。</p>
+      <h3>管理用URL</h3>
+      <p id="manageUrl" class="url"></p>
+      <button data-copy="manageUrl">コピー</button>
+      <a id="uploadLink" class="button" href="#">PDF登録画面へ</a>
+      <h3>参加者用URL</h3>
+      <p id="meetingUrl" class="url"></p>
+      <button data-copy="meetingUrl">コピー</button>
+    </section>
+  </main>
+  <script type="module" src="js/index.js"></script>
+</body>
+</html>

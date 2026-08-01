@@ -14,6 +14,7 @@ public sealed class EventService(IEventRepository repository, IConfiguration con
     public static bool TokenMatches(EventRecord e, string? token)
     {
         if (string.IsNullOrEmpty(token)) return false;
+        if (e.ManagementTokenHash?.Length != 64 || e.ManagementTokenHash.Any(c => !char.IsAsciiHexDigit(c))) return false;
         return CryptographicOperations.FixedTimeEquals(Convert.FromHexString(e.ManagementTokenHash), Convert.FromHexString(HashToken(token)));
     }
 
@@ -34,5 +35,21 @@ public sealed class EventService(IEventRepository repository, IConfiguration con
         var e = await repository.GetAsync(id, ct) ?? throw new KeyNotFoundException();
         if (!TokenMatches(e, token)) throw new UnauthorizedAccessException();
         return e;
+    }
+
+    public Task<T> UpdateAuthorizedAsync<T>(string id, string? token, Func<EventRecord, T> update, CancellationToken ct) =>
+        repository.UpdateAsync(id, e =>
+        {
+            EnsureAuthorized(e, token);
+            return update(e);
+        }, ct);
+
+    public Task DeleteAuthorizedAsync(string id, string? token, CancellationToken ct) =>
+        repository.DeleteAsync(id, e => EnsureAuthorized(e, token), ct);
+
+    private static void EnsureAuthorized(EventRecord value, string? token)
+    {
+        if (!TokenMatches(value, token)) throw new UnauthorizedAccessException();
+        if (value.Status == "deleting") throw new KeyNotFoundException();
     }
 }

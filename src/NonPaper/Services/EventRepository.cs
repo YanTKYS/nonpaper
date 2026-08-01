@@ -8,13 +8,17 @@ public interface IEventRepository
 {
     Task<EventRecord?> GetAsync(string eventId, CancellationToken ct = default);
     Task SaveAsync(EventRecord value, CancellationToken ct = default);
+    Task<T> UpdateAsync<T>(string eventId, Func<EventRecord, T> update, CancellationToken ct = default);
     Task DeleteAsync(string eventId, CancellationToken ct = default);
+    Task DeleteAsync(string eventId, Action<EventRecord> validate, CancellationToken ct = default);
     string DocumentPath(string eventId, string documentId);
 }
 
 public sealed class EventRepository : IEventRepository
 {
     private readonly string root;
+    // Entries deliberately live for the process lifetime. Removing an entry while a waiter still
+    // holds its semaphore can create two independent locks for the same event.
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks = new();
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
@@ -27,10 +31,10 @@ public sealed class EventRepository : IEventRepository
     public async Task<EventRecord?> GetAsync(string eventId, CancellationToken ct = default)
     {
         ValidateId(eventId);
-        var path = EventFile(eventId);
-        if (!File.Exists(path)) return null;
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        return await JsonSerializer.DeserializeAsync<EventRecord>(stream, JsonOptions, ct);
+        var gate = Locks.GetOrAdd(eventId, _ => new(1, 1));
+        await gate.WaitAsync(ct);
+        try { return await ReadUnlockedAsync(eventId, ct); }
+        finally { gate.Release(); }
     }
 
     public async Task SaveAsync(EventRecord value, CancellationToken ct = default)
@@ -40,27 +44,41 @@ public sealed class EventRepository : IEventRepository
         await gate.WaitAsync(ct);
         try
         {
-            var directory = EventDirectory(value.Id);
-            Directory.CreateDirectory(Path.Combine(directory, "documents"));
-            var target = EventFile(value.Id);
-            var temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.WriteThrough))
-            {
-                await JsonSerializer.SerializeAsync(stream, value, JsonOptions, ct);
-                await stream.FlushAsync(ct);
-            }
-            File.Move(temporary, target, true);
+            await WriteUnlockedAsync(value, ct);
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task<T> UpdateAsync<T>(string eventId, Func<EventRecord, T> update, CancellationToken ct = default)
+    {
+        ValidateId(eventId);
+        var gate = Locks.GetOrAdd(eventId, _ => new(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            var value = await ReadUnlockedAsync(eventId, ct) ?? throw new KeyNotFoundException();
+            var result = update(value);
+            await WriteUnlockedAsync(value, ct);
+            return result;
         }
         finally { gate.Release(); }
     }
 
     public async Task DeleteAsync(string eventId, CancellationToken ct = default)
+        => await DeleteAsync(eventId, _ => { }, ct);
+
+    public async Task DeleteAsync(string eventId, Action<EventRecord> validate, CancellationToken ct = default)
     {
         ValidateId(eventId);
         var gate = Locks.GetOrAdd(eventId, _ => new(1, 1));
         await gate.WaitAsync(ct);
-        try { if (Directory.Exists(EventDirectory(eventId))) Directory.Delete(EventDirectory(eventId), true); }
-        finally { gate.Release(); Locks.TryRemove(eventId, out _); }
+        try
+        {
+            var value = await ReadUnlockedAsync(eventId, ct) ?? throw new KeyNotFoundException();
+            validate(value);
+            if (Directory.Exists(EventDirectory(eventId))) Directory.Delete(EventDirectory(eventId), true);
+        }
+        finally { gate.Release(); }
     }
 
     public string DocumentPath(string eventId, string documentId)
@@ -71,9 +89,62 @@ public sealed class EventRepository : IEventRepository
 
     private string EventDirectory(string id) => Path.Combine(root, id);
     private string EventFile(string id) => Path.Combine(EventDirectory(id), "event.json");
+
+    private async Task<EventRecord?> ReadUnlockedAsync(string eventId, CancellationToken ct)
+    {
+        var path = EventFile(eventId);
+        if (!File.Exists(path)) return null;
+        try
+        {
+            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var value = await JsonSerializer.DeserializeAsync<EventRecord>(stream, JsonOptions, ct);
+            ValidateRecord(value, eventId);
+            return value;
+        }
+        catch (DataCorruptionException) { throw; }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            throw new DataCorruptionException(eventId, ex);
+        }
+    }
+
+    private async Task WriteUnlockedAsync(EventRecord value, CancellationToken ct)
+    {
+        var directory = EventDirectory(value.Id);
+        Directory.CreateDirectory(Path.Combine(directory, "documents"));
+        var target = EventFile(value.Id);
+        var temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.WriteThrough))
+            {
+                await JsonSerializer.SerializeAsync(stream, value, JsonOptions, ct);
+                await stream.FlushAsync(ct);
+            }
+            File.Move(temporary, target, true);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    private static void ValidateRecord(EventRecord? value, string expectedId)
+    {
+        if (value is null || value.Id != expectedId || string.IsNullOrWhiteSpace(value.Title) ||
+            value.ManagementTokenHash is null || value.ManagementTokenHash.Length != 64 ||
+            value.ManagementTokenHash.Any(c => !char.IsAsciiHexDigit(c)) ||
+            value.Status is not ("draft" or "published" or "closed" or "deleting") ||
+            value.Documents is null || value.Documents.Any(d => string.IsNullOrWhiteSpace(d.Id) || d.Id.Length != 32 || d.Id.Any(c => !char.IsAsciiHexDigit(c))) ||
+            value.Documents.Select(d => d.Id).Distinct().Count() != value.Documents.Count)
+            throw new DataCorruptionException(expectedId);
+    }
     public static void ValidateId(string id)
     {
         if (string.IsNullOrWhiteSpace(id) || id.Length != 32 || id.Any(c => !char.IsAsciiHexDigit(c)))
             throw new ArgumentException("不正なIDです。");
     }
+}
+
+public sealed class DataCorruptionException(string eventId, Exception? inner = null)
+    : Exception($"Event data is corrupt: {eventId}", inner)
+{
+    public string EventId { get; } = eventId;
 }

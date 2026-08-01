@@ -49,7 +49,7 @@ public sealed class EventRepositoryTests : IDisposable
 
     [Fact] public async Task Delete_RemovesJsonPdfAndFolder()
     {
-        var repository=Repository;var value=Event();await repository.SaveAsync(value);await File.WriteAllTextAsync(repository.DocumentPath(value.Id,EventService.NewId()),"pdf");await repository.DeleteDirectoryAsync(value.Id);Assert.False(Directory.Exists(Path.Combine(root,value.Id)));
+        var repository=Repository;var value=Event();await repository.SaveAsync(value);await File.WriteAllTextAsync(repository.DocumentPath(value.Id,EventService.NewId()),"pdf");await repository.DeleteAsync(value.Id);Assert.False(Directory.Exists(Path.Combine(root,value.Id)));
     }
 
     [Fact] public void ManagementToken_UsesHashAndConstantTimeComparison()

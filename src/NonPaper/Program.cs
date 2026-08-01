@@ -9,6 +9,15 @@ builder.Services.Configure<FormOptions>(o => o.MultipartBodyLengthLimit = builde
 var app = builder.Build();
 if (!app.Environment.IsDevelopment()) app.UseExceptionHandler("/error");
 app.Use(async (ctx, next) => { ctx.Response.Headers.Append("X-Content-Type-Options", "nosniff"); ctx.Response.Headers.Append("X-Frame-Options", "SAMEORIGIN"); ctx.Response.Headers.Append("Referrer-Policy", "no-referrer"); await next(); });
+app.Use(async (ctx, next) =>
+{
+    try { await next(); }
+    catch (DataCorruptionException ex)
+    {
+        app.Logger.LogError(ex, "イベント {EventId} の永続データが破損しています", ex.EventId);
+        if (!ctx.Response.HasStarted) { ctx.Response.StatusCode = 500; await ctx.Response.WriteAsJsonAsync(new { message = "処理中にエラーが発生しました。" }); }
+    }
+});
 app.UseDefaultFiles(); app.UseStaticFiles();
 
 static IResult Problem(string message, int status = 400) => Results.Json(new { message }, statusCode: status);
@@ -20,6 +29,17 @@ static async Task<(EventRecord? value, IResult? error)> Auth(string id, HttpRequ
     catch (ArgumentException) { return (null, Problem("イベントが存在しないか、既に終了・削除されています。", 404)); }
     catch (KeyNotFoundException) { return (null, Problem("イベントが存在しないか、既に終了・削除されています。", 404)); }
     catch (UnauthorizedAccessException) { return (null, Problem("管理用URLが正しくありません。", 401)); }
+}
+
+static void EnsureDraft(EventRecord e) { if (e.Status != "draft") throw new InvalidOperationException("not-draft"); }
+
+static async Task<IResult> Mutate(Func<Task<IResult>> operation)
+{
+    try { return await operation(); }
+    catch (ArgumentException) { return Problem("イベントが存在しないか、既に終了・削除されています。", 404); }
+    catch (KeyNotFoundException) { return Problem("イベントが存在しないか、既に終了・削除されています。", 404); }
+    catch (UnauthorizedAccessException) { return Problem("管理用URLが正しくありません。", 401); }
+    catch (InvalidOperationException ex) when (ex.Message == "not-draft") { return Problem("資料を変更できるのは下書き状態だけです。", 409); }
 }
 
 app.MapPost("/api/events", async (CreateEventRequest request, EventService service, CancellationToken ct) => { try { var x = await service.CreateAsync(request, ct); return Results.Created($"/api/events/{x.Event.Id}", new { @event = x.Event, managementToken = x.Token }); } catch (ArgumentException ex) { return Problem(ex.Message); } });
@@ -45,7 +65,7 @@ app.MapPut("/api/events/{id}/documents/{docId}", async (string id, string docId,
 app.MapPut("/api/events/{id}/documents/order", async (string id, ReorderRequest body, HttpRequest req, EventService service, IEventRepository repo, CancellationToken ct) => { if (!MutatingAllowed(req)) return Problem("不正な要求です。", 403); var a = await Auth(id, req, service, ct); if (a.error is not null) return a.error; if (a.value!.Status != "draft") return Problem("資料を変更できるのは下書き状態だけです。", 409); if (body.DocumentIds.Count != a.value.Documents.Count || body.DocumentIds.Distinct().Count() != body.DocumentIds.Count || body.DocumentIds.Any(x => a.value.Documents.All(d => d.Id != x))) return Problem("資料の並び順が不正です。"); for (var i=0;i<body.DocumentIds.Count;i++) a.value.Documents.Single(d => d.Id == body.DocumentIds[i]).Order=i+1; await repo.SaveAsync(a.value, ct); return Results.Ok(a.value.Documents.OrderBy(x=>x.Order)); });
 app.MapDelete("/api/events/{id}/documents/{docId}", async (string id, string docId, HttpRequest req, EventService service, IEventRepository repo, ILogger<Program> log, CancellationToken ct) => { if (!MutatingAllowed(req)) return Problem("不正な要求です。", 403); var a=await Auth(id,req,service,ct); if(a.error is not null)return a.error;if(a.value!.Status!="draft")return Problem("資料を変更できるのは下書き状態だけです。",409); var d=a.value.Documents.SingleOrDefault(x=>x.Id==docId); if(d is null)return Problem("資料が見つかりません。",404); File.Delete(repo.DocumentPath(id,docId)); a.value.Documents.Remove(d); var n=1; foreach(var x in a.value.Documents.OrderBy(x=>x.Order))x.Order=n++; await repo.SaveAsync(a.value,ct); log.LogInformation("イベント {EventId} の資料 {DocumentId} を削除しました",id,docId); return Results.NoContent(); });
 app.MapGet("/api/events/{id}/documents/{docId}/content", async (string id,string docId,HttpResponse response,IEventRepository repo,CancellationToken ct)=>{ try { var e=await repo.GetAsync(id,ct); if(e is null||e.Status!="published")return Problem("この会議は公開されていません。",403); if(e.Documents.All(x=>x.Id!=docId))return Problem("資料が見つかりません。",404); var p=repo.DocumentPath(id,docId); if(!File.Exists(p))return Problem("資料が見つかりません。",404); response.Headers.CacheControl="no-store, private";response.Headers.Pragma="no-cache";return Results.File(p,"application/pdf",enableRangeProcessing:true,lastModified:null,entityTag:null); } catch(ArgumentException){return Problem("資料が見つかりません。",404);} });
-app.MapDelete("/api/events/{id}", async(string id,HttpRequest req,EventService service,IEventRepository repo,ILogger<Program> log,CancellationToken ct)=>{if(!MutatingAllowed(req))return Problem("不正な要求です。",403);var a=await Auth(id,req,service,ct);if(a.error is not null)return a.error;a.value!.Status="deleting";await repo.SaveAsync(a.value,ct);await repo.DeleteAsync(id,ct);log.LogInformation("イベント {EventId} を削除しました",id);return Results.NoContent();});
+app.MapDelete("/api/events/{id}", async(string id,HttpRequest req,EventService service,ILogger<Program> log,CancellationToken ct)=>await Mutate(async()=>{if(!MutatingAllowed(req))return Problem("不正な要求です。",403);await service.DeleteAuthorizedAsync(id,Token(req),ct);log.LogInformation("イベント {EventId} を削除しました",id);return Results.NoContent();}));
 app.Map("/error",()=>Problem("処理中にエラーが発生しました。",500));
 app.Lifetime.ApplicationStarted.Register(()=>app.Logger.LogInformation("NonPaper v0.1.0 を起動しました"));
 app.Lifetime.ApplicationStopping.Register(()=>app.Logger.LogInformation("NonPaper を停止します"));

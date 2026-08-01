@@ -14,7 +14,7 @@ dotnet build NonPaper.sln -c Release
 dotnet run --project src/NonPaper/NonPaper.csproj
 ```
 
-表示されたURLへアクセスします。閉域環境への配置時は、インターネット接続環境でrestore/publishした成果物を持ち込みます。IISではHosting Bundleを導入し、`dotnet publish -c Release` の出力をアプリケーションとして登録し、アプリプールにデータディレクトリの変更権限を付与してください。HTTPSの利用を推奨します。
+表示されたURLへアクセスします。閉域環境への配置は、インターネット接続環境で作成したGitHub Releaseのリリース成果物（ZIP）を持ち込み、IIS上のWindows Serverへ配置します。詳細なIIS配置・更新・実機確認手順は [docs/deployment-iis.md](docs/deployment-iis.md) を参照してください。
 
 ## 利用手順
 
@@ -43,7 +43,7 @@ closed
 
 ## 保存、設定、バックアップ
 
-イベントは既定で `src/NonPaper/data/events/{eventId}/event.json`、PDFはその配下の `documents/{documentId}.pdf` に保存します。`appsettings.json` の `Storage:Root`、`Upload:MaxFileSizeBytes`（既定100 MiB）、`Upload:MaxDocuments`（既定20）を変更できます。データフォルダー全体を、アプリ停止中または更新がない時間帯に一体としてバックアップしてください。復元もイベントフォルダー単位で行います。
+イベントは既定で `src/NonPaper/data/events/{eventId}/event.json`、PDFはその配下の `documents/{documentId}.pdf` に保存します。`appsettings.json` の `Storage:Root`、`Upload:MaxFileSizeBytes`（既定100 MiB）、`Upload:MaxDocuments`（既定20）を変更できます。データフォルダー全体を、アプリ停止中または更新がない時間帯に一体としてバックアップしてください。復元もイベントフォルダー単位で行います。IIS配置時のデータ保存先・NTFS権限・バックアップ手順は [docs/deployment-iis.md](docs/deployment-iis.md) を参照してください。
 
 削除は認証後に状態を `deleting` として安全に保存してから、PDF、JSON、イベントフォルダーを削除します。既にブラウザーへ読み込まれたデータまでは消去できません。
 

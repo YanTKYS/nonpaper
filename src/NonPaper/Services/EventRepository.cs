@@ -42,8 +42,18 @@ public sealed class EventRepository : IEventRepository
     {
         var path = EventFile(eventId);
         if (!File.Exists(path)) return null;
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        return await JsonSerializer.DeserializeAsync<EventRecord>(stream, JsonOptions, ct);
+        try
+        {
+            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var value = await JsonSerializer.DeserializeAsync<EventRecord>(stream, JsonOptions, ct);
+            ValidateRecord(value, eventId);
+            return value;
+        }
+        catch (DataCorruptionException) { throw; }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            throw new DataCorruptionException(eventId, ex);
+        }
     }
 
     public async Task SaveAsync(EventRecord value, CancellationToken ct = default)
@@ -104,50 +114,31 @@ public sealed class EventRepository : IEventRepository
         finally { gate.Release(); }
     }
 
-    public async Task<TResult> UpdateAsync<TResult>(string eventId, Func<EventRecord, TResult> update, CancellationToken ct = default)
+    public async Task DeleteAsync(string eventId, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(update);
+        await DeleteDirectoryCoreAsync(eventId, null, ct);
+    }
+
+    public async Task DeleteUpdatedAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(beforeDelete);
+        await DeleteDirectoryCoreAsync(eventId, beforeDelete, ct);
+    }
+
+    private async Task DeleteDirectoryCoreAsync(string eventId, Action<EventRecord>? beforeDelete, CancellationToken ct)
+    {
         ValidateId(eventId);
         var gate = Locks.GetOrAdd(eventId, _ => new(1, 1));
         await gate.WaitAsync(ct);
         try
         {
-            var value = await ReadAsync(eventId, ct) ?? throw new KeyNotFoundException();
-            var result = update(value);
-            await WriteAsync(value, ct);
-            return result;
+            if (beforeDelete is not null)
+            {
+                var value = await ReadAsync(eventId, ct);
+                if (value is not null) beforeDelete(value);
+            }
+            if (Directory.Exists(EventDirectory(eventId))) Directory.Delete(EventDirectory(eventId), true);
         }
-        finally { gate.Release(); }
-    }
-
-    public async Task DeleteDirectoryAsync(string eventId, CancellationToken ct = default)
-    {
-        await DeleteDirectoryCoreAsync(eventId, null, ct);
-    }
-
-    public async Task DeleteUpdatedAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(beforeDelete);
-        await DeleteDirectoryCoreAsync(eventId, beforeDelete, ct);
-    }
-
-    private async Task DeleteDirectoryCoreAsync(string eventId, Action<EventRecord>? beforeDelete, CancellationToken ct)
-    {
-        await DeleteDirectoryCoreAsync(eventId, null, ct);
-    }
-
-    public async Task DeleteUpdatedAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(beforeDelete);
-        await DeleteDirectoryCoreAsync(eventId, beforeDelete, ct);
-    }
-
-    private async Task DeleteDirectoryCoreAsync(string eventId, Action<EventRecord>? beforeDelete, CancellationToken ct)
-    {
-        ValidateId(eventId);
-        var gate = Locks.GetOrAdd(eventId, _ => new(1, 1));
-        await gate.WaitAsync(ct);
-        try { if (Directory.Exists(EventDirectory(eventId))) Directory.Delete(EventDirectory(eventId), true); }
         finally { gate.Release(); }
     }
 
@@ -159,42 +150,6 @@ public sealed class EventRepository : IEventRepository
 
     private string EventDirectory(string id) => Path.Combine(root, id);
     private string EventFile(string id) => Path.Combine(EventDirectory(id), "event.json");
-
-    private async Task<EventRecord?> ReadUnlockedAsync(string eventId, CancellationToken ct)
-    {
-        var path = EventFile(eventId);
-        if (!File.Exists(path)) return null;
-        try
-        {
-            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-            var value = await JsonSerializer.DeserializeAsync<EventRecord>(stream, JsonOptions, ct);
-            ValidateRecord(value, eventId);
-            return value;
-        }
-        catch (DataCorruptionException) { throw; }
-        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
-        {
-            throw new DataCorruptionException(eventId, ex);
-        }
-    }
-
-    private async Task WriteUnlockedAsync(EventRecord value, CancellationToken ct)
-    {
-        var directory = EventDirectory(value.Id);
-        Directory.CreateDirectory(Path.Combine(directory, "documents"));
-        var target = EventFile(value.Id);
-        var temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.WriteThrough))
-            {
-                await JsonSerializer.SerializeAsync(stream, value, JsonOptions, ct);
-                await stream.FlushAsync(ct);
-            }
-            File.Move(temporary, target, true);
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
-    }
 
     private static void ValidateRecord(EventRecord? value, string expectedId)
     {

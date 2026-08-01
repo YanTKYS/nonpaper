@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0)'
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Extract release notes
+        id: notes
+        shell: python
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          import re, os, sys
+
+          tag = os.environ["RELEASE_TAG"]
+          with open("docs/release-notes.md", "r", encoding="utf-8") as f:
+              content = f.read()
+
+          # Accept both "1.10.0" and "v1.10.0" as input; release-notes uses "## v1.x.x" format
+          search_variants = [tag, ("v" + tag) if not tag.startswith("v") else tag[1:]]
+          m = None
+          for search_tag in search_variants:
+              pattern = r'^## (' + re.escape(search_tag) + r'[^\n]*)\n(.*?)(?=\n^## |\Z)'
+              m = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+              if m:
+                  break
+          if not m:
+              print(f"::error::Tag '{tag}' not found in docs/release-notes.md")
+              sys.exit(1)
+
+          title = m.group(1).strip()
+          body = m.group(2).strip()
+
+          with open("release_body.txt", "w", encoding="utf-8") as f:
+              f.write(body)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"title={title}\n")
+
+      # ── Current release: .NET 8 self-contained single-file ──────────────────
+
+      - name: Publish self-contained single-file
+        shell: pwsh
+        run: |
+          dotnet publish src/NonPaper/NonPaper.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=none `
+            -p:DebugSymbols=false `
+            -o publish
+
+      - name: Package as ZIP
+        id: package
+        shell: pwsh
+        run: |
+          $tag     = "${{ inputs.tag }}"
+          $dirName = "nonpaper_$tag"
+          $stageDir = Join-Path "stage" $dirName
+
+          New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
+          New-Item -ItemType Directory -Path "artifacts"      -Force | Out-Null
+
+          # Copy only the single exe (exclude any leftover pdb/xml/json)
+          Get-ChildItem -Path "publish" -File |
+            Where-Object { $_.Extension -notin @('.pdb', '.xml', '.json') } |
+            Copy-Item -Destination $stageDir
+
+          Copy-Item "README.md" -Destination $stageDir
+
+          $zipPath = Join-Path "artifacts" "$dirName.zip"
+          Compress-Archive -Path $stageDir -DestinationPath $zipPath -Force
+
+          "zip_path=$zipPath" | Out-File -Append $env:GITHUB_OUTPUT
+
+      # ── Create GitHub Release ─────────────────────────────────────────────────
+
+      - name: Create / overwrite GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag     = "${{ inputs.tag }}"
+          $title   = "${{ steps.notes.outputs.title }}"
+          $zipPath = "${{ steps.package.outputs.zip_path }}"
+
+          # Delete existing release (ignore error if none exists)
+          gh release delete $tag --yes 2>&1 | Out-Null
+          $global:LASTEXITCODE = 0
+
+          # Re-create or force-update the tag
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -fa $tag -m "Release $tag"
+          git push -f origin "refs/tags/$tag"
+
+          gh release create $tag $zipPath `
+            --title $title `
+            --notes-file release_body.txt

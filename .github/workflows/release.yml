@@ -74,6 +74,71 @@ jobs:
             -p:DebugSymbols=false `
             -o publish
 
+      - name: Verify publish output
+        shell: pwsh
+        run: |
+          # IIS配置に必須のファイルがdotnet publishの出力に含まれることを確認する。
+          # 不足がある場合はZIPを作らずワークフローを失敗させる。
+          $requiredFiles = @(
+            "publish\NonPaper.exe",
+            "publish\appsettings.json",
+            "publish\web.config",
+            "publish\wwwroot\index.html",
+            "publish\wwwroot\manage.html",
+            "publish\wwwroot\upload.html",
+            "publish\wwwroot\meeting.html"
+          )
+          foreach ($path in $requiredFiles) {
+            if (-not (Test-Path $path)) {
+              throw "Required release file is missing: $path"
+            }
+          }
+          if (-not (Get-ChildItem "publish\wwwroot\css" -Filter "*.css" -File -ErrorAction SilentlyContinue)) {
+            throw "No CSS files found under publish\wwwroot\css"
+          }
+          if (-not (Get-ChildItem "publish\wwwroot\js" -Filter "*.js" -File -ErrorAction SilentlyContinue)) {
+            throw "No JavaScript files found under publish\wwwroot\js"
+          }
+
+      - name: Configure IIS upload limit in web.config
+        shell: pwsh
+        run: |
+          # dotnet publishが生成したweb.configへ、IIS側のリクエストサイズ上限
+          # (requestLimits/maxAllowedContentLength) を追加する。既に設定済みの
+          # 場合は変更しない。値はNonPaper側のMaxFileSizeBytes(既定100MiB)より
+          # 大きい250MiBとし、docs/deployment-iis.mdの記載と一致させる。
+          $webConfigPath = "publish\web.config"
+          [xml]$xml = Get-Content -Path $webConfigPath
+
+          $webServer = $xml.configuration.location.'system.webServer'
+          if (-not $webServer) {
+            throw "Unexpected web.config structure: system.webServer not found"
+          }
+
+          $security = $webServer.SelectSingleNode("security")
+          if (-not $security) {
+            $security = $xml.CreateElement("security")
+            $webServer.AppendChild($security) | Out-Null
+          }
+
+          $requestFiltering = $security.SelectSingleNode("requestFiltering")
+          if (-not $requestFiltering) {
+            $requestFiltering = $xml.CreateElement("requestFiltering")
+            $security.AppendChild($requestFiltering) | Out-Null
+          }
+
+          $requestLimits = $requestFiltering.SelectSingleNode("requestLimits")
+          if (-not $requestLimits) {
+            $requestLimits = $xml.CreateElement("requestLimits")
+            $requestFiltering.AppendChild($requestLimits) | Out-Null
+          }
+
+          if (-not $requestLimits.maxAllowedContentLength) {
+            $requestLimits.SetAttribute("maxAllowedContentLength", "262144000")
+          }
+
+          $xml.Save($webConfigPath)
+
       - name: Package as ZIP
         id: package
         shell: pwsh
@@ -85,17 +150,44 @@ jobs:
           New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
           New-Item -ItemType Directory -Path "artifacts"      -Force | Out-Null
 
-          # Copy only the single exe (exclude any leftover pdb/xml/json)
-          Get-ChildItem -Path "publish" -File |
-            Where-Object { $_.Extension -notin @('.pdb', '.xml', '.json') } |
-            Copy-Item -Destination $stageDir
+          # publish配下を丸ごとコピーする（wwwrootなどのサブディレクトリも含める）。
+          # appsettings.jsonやweb.configはIIS配置に必要なため除外しない。
+          Copy-Item -Path "publish\*" -Destination $stageDir -Recurse -Force
 
-          Copy-Item "README.md" -Destination $stageDir
+          # 不要な.pdb/.xmlのみ除外する。
+          Get-ChildItem -Path $stageDir -Recurse -File |
+            Where-Object { $_.Extension -in @('.pdb', '.xml') } |
+            Remove-Item -Force
+
+          Copy-Item "README.md" -Destination $stageDir -Force
 
           $zipPath = Join-Path "artifacts" "$dirName.zip"
           Compress-Archive -Path $stageDir -DestinationPath $zipPath -Force
 
           "zip_path=$zipPath" | Out-File -Append $env:GITHUB_OUTPUT
+
+      - name: Verify staged release contents
+        shell: pwsh
+        run: |
+          $tag      = "${{ inputs.tag }}"
+          $stageDir = Join-Path "stage" "nonpaper_$tag"
+
+          $requiredFiles = @(
+            "NonPaper.exe",
+            "appsettings.json",
+            "web.config",
+            "README.md",
+            "wwwroot\index.html",
+            "wwwroot\manage.html",
+            "wwwroot\upload.html",
+            "wwwroot\meeting.html"
+          )
+          foreach ($relative in $requiredFiles) {
+            $path = Join-Path $stageDir $relative
+            if (-not (Test-Path $path)) {
+              throw "Required file missing from staged release: $path"
+            }
+          }
 
       # ── Create GitHub Release ─────────────────────────────────────────────────
 

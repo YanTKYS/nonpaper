@@ -31,17 +31,6 @@ static async Task<(EventRecord? value, IResult? error)> Auth(string id, HttpRequ
     catch (UnauthorizedAccessException) { return (null, Problem("管理用URLが正しくありません。", 401)); }
 }
 
-static void EnsureDraft(EventRecord e) { if (e.Status != "draft") throw new InvalidOperationException("not-draft"); }
-
-static async Task<IResult> Mutate(Func<Task<IResult>> operation)
-{
-    try { return await operation(); }
-    catch (ArgumentException) { return Problem("イベントが存在しないか、既に終了・削除されています。", 404); }
-    catch (KeyNotFoundException) { return Problem("イベントが存在しないか、既に終了・削除されています。", 404); }
-    catch (UnauthorizedAccessException) { return Problem("管理用URLが正しくありません。", 401); }
-    catch (InvalidOperationException ex) when (ex.Message == "not-draft") { return Problem("資料を変更できるのは下書き状態だけです。", 409); }
-}
-
 app.MapPost("/api/events", async (CreateEventRequest request, EventService service, CancellationToken ct) => { try { var x = await service.CreateAsync(request, ct); return Results.Created($"/api/events/{x.Event.Id}", new { @event = x.Event, managementToken = x.Token }); } catch (ArgumentException ex) { return Problem(ex.Message); } });
 app.MapGet("/api/events/{id}/manage", async (string id, HttpRequest req, EventService service, CancellationToken ct) => { var a = await Auth(id, req, service, ct); return a.error ?? Results.Ok(a.value); });
 app.MapGet("/api/events/{id}", async (string id, IEventRepository repo, CancellationToken ct) => { try { var e = await repo.GetAsync(id, ct); if (e is null) return Problem("イベントが存在しないか、既に終了・削除されています。", 404); if (e.Status == "draft") return Problem("この会議は公開されていません。", 403); if (e.Status != "published") return Problem("この会議は終了しました。", 410); return Results.Ok(new { e.Id, e.Title, e.Description, e.StartsAt, e.EndsAt, e.Status, documents = e.Documents.OrderBy(d => d.Order).Select(d => new { d.Id, d.Title, d.Order }) }); } catch (ArgumentException) { return Problem("イベントが存在しないか、既に終了・削除されています。", 404); } });

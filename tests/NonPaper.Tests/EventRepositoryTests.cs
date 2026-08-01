@@ -140,6 +140,34 @@ public sealed class EventRepositoryTests : IDisposable
         Assert.Equal("published", (await repository.GetAsync(value.Id))!.Status);
     }
 
+    [Fact]
+    public async Task ClosedEvent_CanBeDeletedByAuthorizedManager()
+    {
+        var repository = Repository;
+        var value = Event();
+        var token = "management-token";
+        value.Status = "closed";
+        value.ManagementTokenHash = EventService.HashToken(token);
+        await repository.SaveAsync(value);
+
+        await Service(repository).DeleteAuthorizedAsync(value.Id, token, default);
+
+        Assert.False(Directory.Exists(Path.Combine(root, value.Id)));
+    }
+
+    [Fact]
+    public async Task DeleteAuthorizedAsync_RejectsInvalidTokenWithoutDeletingEvent()
+    {
+        var repository = Repository;
+        var value = Event();
+        await repository.SaveAsync(value);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            Service(repository).DeleteAuthorizedAsync(value.Id, "invalid-token", default));
+
+        Assert.NotNull(await repository.GetAsync(value.Id));
+    }
+
     private static EventService Service(IEventRepository repository) => new(
         repository,
         new ConfigurationBuilder().Build(),

@@ -52,4 +52,12 @@ public sealed class EventService(IEventRepository repository, IConfiguration con
             value.Status = next;
             value.UpdatedAt = DateTimeOffset.Now;
         }, ct);
+
+    public Task DeleteAuthorizedAsync(string id, string? token, CancellationToken ct) =>
+        repository.DeleteAsync(id, value =>
+        {
+            if (!TokenMatches(value, token)) throw new UnauthorizedAccessException();
+            value.Status = "deleting";
+            value.UpdatedAt = DateTimeOffset.Now;
+        }, ct);
 }

@@ -10,7 +10,7 @@ public interface IEventRepository
     Task SaveAsync(EventRecord value, CancellationToken ct = default);
     Task<EventRecord> UpdateAsync(string eventId, Action<EventRecord> update, CancellationToken ct = default);
     Task DeleteAsync(string eventId, CancellationToken ct = default);
-    Task DeleteAsync(string eventId, Action<EventRecord> validate, CancellationToken ct = default);
+    Task DeleteAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default);
     string DocumentPath(string eventId, string documentId);
 }
 
@@ -92,13 +92,29 @@ public sealed class EventRepository : IEventRepository
 
     public async Task DeleteAsync(string eventId, Action<EventRecord> validate, CancellationToken ct = default)
     {
+        await DeleteCoreAsync(eventId, null, ct);
+    }
+
+    public async Task DeleteAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(beforeDelete);
+        await DeleteCoreAsync(eventId, beforeDelete, ct);
+    }
+
+    private async Task DeleteCoreAsync(string eventId, Action<EventRecord>? beforeDelete, CancellationToken ct)
+    {
         ValidateId(eventId);
         var gate = Locks.GetOrAdd(eventId, _ => new(1, 1));
         await gate.WaitAsync(ct);
         try
         {
-            var value = await ReadUnlockedAsync(eventId, ct) ?? throw new KeyNotFoundException();
-            validate(value);
+            if (beforeDelete is not null)
+            {
+                var value = await ReadAsync(eventId, ct) ?? throw new KeyNotFoundException();
+                beforeDelete(value);
+                await WriteAsync(value, ct);
+            }
+
             if (Directory.Exists(EventDirectory(eventId))) Directory.Delete(EventDirectory(eventId), true);
         }
         finally { gate.Release(); }

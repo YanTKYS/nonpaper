@@ -14,6 +14,7 @@ public sealed class EventService(IEventRepository repository, IConfiguration con
     public static bool TokenMatches(EventRecord e, string? token)
     {
         if (string.IsNullOrEmpty(token)) return false;
+        if (e.ManagementTokenHash?.Length != 64 || e.ManagementTokenHash.Any(c => !char.IsAsciiHexDigit(c))) return false;
         return CryptographicOperations.FixedTimeEquals(Convert.FromHexString(e.ManagementTokenHash), Convert.FromHexString(HashToken(token)));
     }
 

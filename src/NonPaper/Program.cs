@@ -9,6 +9,15 @@ builder.Services.Configure<FormOptions>(o => o.MultipartBodyLengthLimit = builde
 var app = builder.Build();
 if (!app.Environment.IsDevelopment()) app.UseExceptionHandler("/error");
 app.Use(async (ctx, next) => { ctx.Response.Headers.Append("X-Content-Type-Options", "nosniff"); ctx.Response.Headers.Append("X-Frame-Options", "SAMEORIGIN"); ctx.Response.Headers.Append("Referrer-Policy", "no-referrer"); await next(); });
+app.Use(async (ctx, next) =>
+{
+    try { await next(); }
+    catch (DataCorruptionException ex)
+    {
+        app.Logger.LogError(ex, "イベント {EventId} の永続データが破損しています", ex.EventId);
+        if (!ctx.Response.HasStarted) { ctx.Response.StatusCode = 500; await ctx.Response.WriteAsJsonAsync(new { message = "処理中にエラーが発生しました。" }); }
+    }
+});
 app.UseDefaultFiles(); app.UseStaticFiles();
 
 static IResult Problem(string message, int status = 400) => Results.Json(new { message }, statusCode: status);
@@ -20,6 +29,17 @@ static async Task<(EventRecord? value, IResult? error)> Auth(string id, HttpRequ
     catch (ArgumentException) { return (null, Problem("イベントが存在しないか、既に終了・削除されています。", 404)); }
     catch (KeyNotFoundException) { return (null, Problem("イベントが存在しないか、既に終了・削除されています。", 404)); }
     catch (UnauthorizedAccessException) { return (null, Problem("管理用URLが正しくありません。", 401)); }
+}
+
+static void EnsureDraft(EventRecord e) { if (e.Status != "draft") throw new InvalidOperationException("not-draft"); }
+
+static async Task<IResult> Mutate(Func<Task<IResult>> operation)
+{
+    try { return await operation(); }
+    catch (ArgumentException) { return Problem("イベントが存在しないか、既に終了・削除されています。", 404); }
+    catch (KeyNotFoundException) { return Problem("イベントが存在しないか、既に終了・削除されています。", 404); }
+    catch (UnauthorizedAccessException) { return Problem("管理用URLが正しくありません。", 401); }
+    catch (InvalidOperationException ex) when (ex.Message == "not-draft") { return Problem("資料を変更できるのは下書き状態だけです。", 409); }
 }
 
 app.MapPost("/api/events", async (CreateEventRequest request, EventService service, CancellationToken ct) => { try { var x = await service.CreateAsync(request, ct); return Results.Created($"/api/events/{x.Event.Id}", new { @event = x.Event, managementToken = x.Token }); } catch (ArgumentException ex) { return Problem(ex.Message); } });

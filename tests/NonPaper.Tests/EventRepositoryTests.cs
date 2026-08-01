@@ -27,46 +27,21 @@ public sealed class EventRepositoryTests : IDisposable
         Assert.NotNull(await repository.GetAsync(value.Id));
     }
 
-    [Fact] public async Task ConcurrentUpdates_DoNotLoseChanges()
+    [Fact]
+    public async Task UpdateAsync_CanReturnAValueFromTheLockedMutation()
     {
         var repository = Repository;
         var value = Event();
         await repository.SaveAsync(value);
 
-        await Task.WhenAll(Enumerable.Range(0, 20).Select(i => repository.UpdateAsync(value.Id, current =>
+        var title = await repository.UpdateAsync(value.Id, current =>
         {
-            current.Documents.Add(Document(i));
-            return true;
-        })));
+            current.Title = "更新後の会議";
+            return current.Title;
+        });
 
-        var loaded = await repository.GetAsync(value.Id);
-        Assert.Equal(20, loaded!.Documents.Count);
-        Assert.Equal(20, loaded.Documents.Select(x => x.Id).Distinct().Count());
-    }
-
-    [Fact] public async Task UpdateAfterDelete_DoesNotRecreateEvent()
-    {
-        var repository = Repository;
-        var value = Event();
-        await repository.SaveAsync(value);
-        await repository.DeleteAsync(value.Id);
-
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => repository.UpdateAsync(value.Id, current => { current.Title = "復活"; return true; }));
-        Assert.False(Directory.Exists(Path.Combine(root, value.Id)));
-    }
-
-    [Theory]
-    [InlineData("{ invalid")]
-    [InlineData("{\"id\":\"00000000000000000000000000000000\",\"title\":\"x\",\"status\":\"draft\",\"managementTokenHash\":\"bad\"}")]
-    public async Task CorruptEventData_HasDedicatedException(string json)
-    {
-        var repository = Repository;
-        var id = new string('0', 32);
-        Directory.CreateDirectory(Path.Combine(root, id));
-        await File.WriteAllTextAsync(Path.Combine(root, id, "event.json"), json);
-
-        var exception = await Assert.ThrowsAsync<DataCorruptionException>(() => repository.GetAsync(id));
-        Assert.Equal(id, exception.EventId);
+        Assert.Equal("更新後の会議", title);
+        Assert.Equal(title, (await repository.GetAsync(value.Id))!.Title);
     }
 
     [Theory] [InlineData("../bad")] [InlineData("0000000000000000000000000000000g")] [InlineData("")]

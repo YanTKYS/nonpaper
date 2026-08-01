@@ -9,7 +9,8 @@ public interface IEventRepository
     Task<EventRecord?> GetAsync(string eventId, CancellationToken ct = default);
     Task SaveAsync(EventRecord value, CancellationToken ct = default);
     Task<EventRecord> UpdateAsync(string eventId, Action<EventRecord> update, CancellationToken ct = default);
-    Task DeleteDirectoryAsync(string eventId, CancellationToken ct = default);
+    Task<TResult> UpdateAsync<TResult>(string eventId, Func<EventRecord, TResult> update, CancellationToken ct = default);
+    Task DeleteAsync(string eventId, CancellationToken ct = default);
     Task DeleteUpdatedAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default);
     string DocumentPath(string eventId, string documentId);
 }
@@ -87,7 +88,34 @@ public sealed class EventRepository : IEventRepository
         finally { gate.Release(); }
     }
 
+    public async Task<TResult> UpdateAsync<TResult>(string eventId, Func<EventRecord, TResult> update, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        ValidateId(eventId);
+        var gate = Locks.GetOrAdd(eventId, _ => new(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            var value = await ReadAsync(eventId, ct) ?? throw new KeyNotFoundException();
+            var result = update(value);
+            await WriteAsync(value, ct);
+            return result;
+        }
+        finally { gate.Release(); }
+    }
+
     public async Task DeleteDirectoryAsync(string eventId, CancellationToken ct = default)
+    {
+        await DeleteDirectoryCoreAsync(eventId, null, ct);
+    }
+
+    public async Task DeleteUpdatedAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(beforeDelete);
+        await DeleteDirectoryCoreAsync(eventId, beforeDelete, ct);
+    }
+
+    private async Task DeleteDirectoryCoreAsync(string eventId, Action<EventRecord>? beforeDelete, CancellationToken ct)
     {
         await DeleteDirectoryCoreAsync(eventId, null, ct);
     }

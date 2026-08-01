@@ -26,6 +26,21 @@ dotnet run --project src/NonPaper/NonPaper.csproj
 6. 管理画面で会議を終了すると、参加者画面は最大30秒以内に閲覧を終了します。
 7. 会議名を確認するダイアログを経てイベントを削除します。
 
+## イベントの状態遷移
+
+```text
+draft
+  ├─ 公開 → published
+  └─ 会議終了 → closed
+published
+  ├─ 下書きへ戻す → draft
+  └─ 会議終了 → closed
+closed
+  └─ イベント削除のみ
+```
+
+`closed` は終端状態であり、終了した会議は再公開できません。公開中に資料を編集する場合は一度下書きへ戻す必要があり、その間は参加者が資料を閲覧できません。`deleting` は削除処理だけが使用する内部状態で、管理画面や状態変更APIからは指定できません。イベントを削除すると、保存されたJSON、PDF、およびイベントフォルダーが削除されます。
+
 ## 保存、設定、バックアップ
 
 イベントは既定で `src/NonPaper/data/events/{eventId}/event.json`、PDFはその配下の `documents/{documentId}.pdf` に保存します。`appsettings.json` の `Storage:Root`、`Upload:MaxFileSizeBytes`（既定100 MiB）、`Upload:MaxDocuments`（既定20）を変更できます。データフォルダー全体を、アプリ停止中または更新がない時間帯に一体としてバックアップしてください。復元もイベントフォルダー単位で行います。

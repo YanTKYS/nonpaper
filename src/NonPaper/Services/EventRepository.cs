@@ -9,7 +9,7 @@ public interface IEventRepository
     Task<EventRecord?> GetAsync(string eventId, CancellationToken ct = default);
     Task SaveAsync(EventRecord value, CancellationToken ct = default);
     Task<EventRecord> UpdateAsync(string eventId, Action<EventRecord> update, CancellationToken ct = default);
-    Task DeleteAsync(string eventId, CancellationToken ct = default);
+    Task DeleteDirectoryAsync(string eventId, CancellationToken ct = default);
     Task DeleteUpdatedAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default);
     string DocumentPath(string eventId, string documentId);
 }
@@ -87,32 +87,18 @@ public sealed class EventRepository : IEventRepository
         finally { gate.Release(); }
     }
 
-    public async Task DeleteAsync(string eventId, CancellationToken ct = default)
-        => await DeleteAsync(eventId, _ => { }, ct);
-
-    public async Task DeleteAsync(string eventId, Action<EventRecord> validate, CancellationToken ct = default)
+    public async Task DeleteDirectoryAsync(string eventId, CancellationToken ct = default)
     {
-        await DeleteCoreAsync(eventId, null, ct);
-    }
-
-    public async Task DeleteAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(beforeDelete);
-        await DeleteCoreAsync(eventId, beforeDelete, ct);
-    }
-
-    private async Task DeleteCoreAsync(string eventId, Action<EventRecord>? beforeDelete, CancellationToken ct)
-    {
-        await DeleteCoreAsync(eventId, null, ct);
+        await DeleteDirectoryCoreAsync(eventId, null, ct);
     }
 
     public async Task DeleteUpdatedAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(beforeDelete);
-        await DeleteCoreAsync(eventId, beforeDelete, ct);
+        await DeleteDirectoryCoreAsync(eventId, beforeDelete, ct);
     }
 
-    private async Task DeleteCoreAsync(string eventId, Action<EventRecord>? beforeDelete, CancellationToken ct)
+    private async Task DeleteDirectoryCoreAsync(string eventId, Action<EventRecord>? beforeDelete, CancellationToken ct)
     {
         ValidateId(eventId);
         var gate = Locks.GetOrAdd(eventId, _ => new(1, 1));

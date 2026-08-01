@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NonPaper", "src\NonPaper\NonPaper.csproj", "{FF65F834-6234-49D1-B4EF-A83942020F14}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NonPaper.Tests", "tests\NonPaper.Tests\NonPaper.Tests.csproj", "{7E929B23-EC32-4F7B-B9E7-88A73CBA05EE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FF65F834-6234-49D1-B4EF-A83942020F14}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FF65F834-6234-49D1-B4EF-A83942020F14}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FF65F834-6234-49D1-B4EF-A83942020F14}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FF65F834-6234-49D1-B4EF-A83942020F14}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7E929B23-EC32-4F7B-B9E7-88A73CBA05EE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7E929B23-EC32-4F7B-B9E7-88A73CBA05EE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7E929B23-EC32-4F7B-B9E7-88A73CBA05EE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7E929B23-EC32-4F7B-B9E7-88A73CBA05EE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -37,19 +37,19 @@ public sealed class EventService(IEventRepository repository, IConfiguration con
         return e;
     }
 
-    public Task<T> UpdateAuthorizedAsync<T>(string id, string? token, Func<EventRecord, T> update, CancellationToken ct) =>
-        repository.UpdateAsync(id, e =>
+    public Task<EventRecord> UpdateAuthorizedAsync(string id, string? token, Action<EventRecord> update, CancellationToken ct) =>
+        repository.UpdateAsync(id, value =>
         {
-            EnsureAuthorized(e, token);
-            return update(e);
+            if (!TokenMatches(value, token)) throw new UnauthorizedAccessException();
+            update(value);
         }, ct);
 
-    public Task DeleteAuthorizedAsync(string id, string? token, CancellationToken ct) =>
-        repository.DeleteAsync(id, e => EnsureAuthorized(e, token), ct);
-
-    private static void EnsureAuthorized(EventRecord value, string? token)
-    {
-        if (!TokenMatches(value, token)) throw new UnauthorizedAccessException();
-        if (value.Status == "deleting") throw new KeyNotFoundException();
-    }
+    public Task<EventRecord> ChangeStatusAsync(string id, string? token, string next, CancellationToken ct) =>
+        UpdateAuthorizedAsync(id, token, value =>
+        {
+            var error = EventStatusTransitions.Validate(value.Status, next);
+            if (error is not null) throw new EventStateConflictException(error);
+            value.Status = next;
+            value.UpdatedAt = DateTimeOffset.Now;
+        }, ct);
 }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.Hosting;
 using NonPaper.Models;
 using NonPaper.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace NonPaper.Tests;
@@ -81,6 +82,68 @@ public sealed class EventRepositoryTests : IDisposable
         var token=EventService.NewToken();var value=Event();value.ManagementTokenHash=EventService.HashToken(token);
         Assert.True(EventService.TokenMatches(value,token));Assert.False(EventService.TokenMatches(value,token+"x"));Assert.DoesNotContain(token,value.ManagementTokenHash);
     }
+
+    [Theory]
+    [InlineData("draft", "published")]
+    [InlineData("draft", "closed")]
+    [InlineData("published", "draft")]
+    [InlineData("published", "closed")]
+    public void AllowedStatusTransitions_AreAccepted(string current, string next) =>
+        Assert.True(EventStatusTransitions.CanTransition(current, next));
+
+    [Theory]
+    [InlineData("closed", "draft", "終了した会議の状態は変更できません。")]
+    [InlineData("closed", "published", "終了した会議の状態は変更できません。")]
+    [InlineData("draft", "draft", "会議は既に指定された状態です。")]
+    [InlineData("published", "published", "会議は既に指定された状態です。")]
+    [InlineData("closed", "closed", "会議は既に指定された状態です。")]
+    [InlineData("draft", "invalid", "この状態へは変更できません。")]
+    [InlineData("draft", "deleting", "この状態へは変更できません。")]
+    public void RejectedStatusTransitions_ReturnUserMessage(string current, string next, string message) =>
+        Assert.Equal(message, EventStatusTransitions.Validate(current, next));
+
+    [Fact]
+    public async Task RejectedStatusTransition_DoesNotChangeJsonOrUpdatedAt()
+    {
+        var repository = Repository;
+        var value = Event();
+        var token = "management-token";
+        value.ManagementTokenHash = EventService.HashToken(token);
+        await repository.SaveAsync(value);
+        var beforeJson = await File.ReadAllTextAsync(Path.Combine(root, value.Id, "event.json"));
+        var service = Service(repository);
+
+        await Assert.ThrowsAsync<EventStateConflictException>(() => service.ChangeStatusAsync(value.Id, token, "draft", default));
+
+        var loaded = await repository.GetAsync(value.Id);
+        Assert.Equal(value.UpdatedAt, loaded!.UpdatedAt);
+        Assert.Equal(beforeJson, await File.ReadAllTextAsync(Path.Combine(root, value.Id, "event.json")));
+    }
+
+    [Fact]
+    public async Task ConcurrentStatusChanges_ValidateLatestStateInsideLock()
+    {
+        var repository = Repository;
+        var value = Event();
+        var token = "management-token";
+        value.ManagementTokenHash = EventService.HashToken(token);
+        await repository.SaveAsync(value);
+        var service = Service(repository);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 2).Select(async _ =>
+        {
+            try { await service.ChangeStatusAsync(value.Id, token, "published", default); return true; }
+            catch (EventStateConflictException) { return false; }
+        }));
+
+        Assert.Single(results, result => result);
+        Assert.Equal("published", (await repository.GetAsync(value.Id))!.Status);
+    }
+
+    private static EventService Service(IEventRepository repository) => new(
+        repository,
+        new ConfigurationBuilder().Build(),
+        NullLogger<EventService>.Instance);
 
     private static EventRecord Event()=>new(){Id=EventService.NewId(),Title="庁内会議",StartsAt=DateTimeOffset.Now,EndsAt=DateTimeOffset.Now.AddHours(1),CreatedAt=DateTimeOffset.Now,UpdatedAt=DateTimeOffset.Now,ManagementTokenHash=EventService.HashToken("test")};
     private static DocumentRecord Document(int number) => new() { Id = number.ToString("x32"), Title = $"資料{number}", OriginalFileName = $"{number}.pdf", StoredFileName = $"{number:x32}.pdf", Order = number + 1, FileSize = 5, UploadedAt = DateTimeOffset.Now };

@@ -10,7 +10,7 @@ public interface IEventRepository
     Task SaveAsync(EventRecord value, CancellationToken ct = default);
     Task<EventRecord> UpdateAsync(string eventId, Action<EventRecord> update, CancellationToken ct = default);
     Task DeleteAsync(string eventId, CancellationToken ct = default);
-    Task DeleteAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default);
+    Task DeleteUpdatedAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default);
     string DocumentPath(string eventId, string documentId);
 }
 
@@ -96,6 +96,17 @@ public sealed class EventRepository : IEventRepository
     }
 
     public async Task DeleteAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(beforeDelete);
+        await DeleteCoreAsync(eventId, beforeDelete, ct);
+    }
+
+    private async Task DeleteCoreAsync(string eventId, Action<EventRecord>? beforeDelete, CancellationToken ct)
+    {
+        await DeleteCoreAsync(eventId, null, ct);
+    }
+
+    public async Task DeleteUpdatedAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(beforeDelete);
         await DeleteCoreAsync(eventId, beforeDelete, ct);

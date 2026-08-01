@@ -54,7 +54,7 @@ public sealed class EventService(IEventRepository repository, IConfiguration con
         }, ct);
 
     public Task DeleteAuthorizedAsync(string id, string? token, CancellationToken ct) =>
-        repository.DeleteAsync(id, value =>
+        repository.DeleteUpdatedAsync(id, value =>
         {
             if (!TokenMatches(value, token)) throw new UnauthorizedAccessException();
             value.Status = "deleting";

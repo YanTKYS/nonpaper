@@ -1,6 +1,6 @@
 # Release Notes
 
-## 未リリース
+## v0.1.1
 
 コードレビュー（[docs/review/code-review-v0.1.0.md](review/code-review-v0.1.0.md)）で指摘された不具合と、通常業務で支障となる不具合を修正しました。
 

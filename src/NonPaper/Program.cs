@@ -167,7 +167,7 @@ app.MapDelete("/api/events/{id}", (string id, HttpRequest req, EventService serv
 }));
 
 app.Map("/error", () => Problem("処理中にエラーが発生しました。", 500));
-app.Lifetime.ApplicationStarted.Register(() => app.Logger.LogInformation("NonPaper v0.1.0 を起動しました"));
+app.Lifetime.ApplicationStarted.Register(() => app.Logger.LogInformation("NonPaper v0.1.1 を起動しました"));
 app.Lifetime.ApplicationStopping.Register(() => app.Logger.LogInformation("NonPaper を停止します"));
 app.Run();
 

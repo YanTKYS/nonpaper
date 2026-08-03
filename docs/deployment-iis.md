@@ -259,7 +259,9 @@ NonPaper側の1ファイル上限が100 MiB（`Upload:MaxFileSizeBytes`）であ
 * IISの`maxAllowedContentLength`：HTTPリクエスト **全体** の上限（バイト数）
 * 複数PDFを同時アップロードする画面では、IIS側は合計容量を考慮する必要があります
 
-初期値として`maxAllowedContentLength="262144000"`（250 MiB）を設定していますが、大容量PDFを複数同時に登録する運用では不足する可能性があるため、実運用に合わせて`web.config`の値を調整してください。ASP.NET Core側にもフォーム・リクエストサイズの制限機構がありますが、現行のNonPaperアプリケーションコードでは既定値のままです。運用上不足する場合は、アプリケーション側の設定追加もあわせて検討してください。
+初期値として`maxAllowedContentLength="262144000"`（250 MiB）を設定していますが、大容量PDFを複数同時に登録する運用では不足する可能性があるため、実運用に合わせて`web.config`の値を調整してください。
+
+ASP.NET Core側（Kestrel/IIS統合）の要求本文サイズ上限は既定で30 MB前後ですが、NonPaperはPDF登録APIに限り`Upload:MaxFileSizeBytes` × `Upload:MaxDocuments`まで上限を引き上げます。したがって`appsettings.json`の値を変更すればアプリケーション側の上限も追従し、追加の設定は不要です。IIS側の`maxAllowedContentLength`だけは`web.config`で別途調整してください。
 
 ## 11. サイト起動と接続確認
 
@@ -422,10 +424,11 @@ C:\inetpub\nonpaper\logs
 
 確認事項：
 
-* NonPaper側のファイル上限（`Upload:MaxFileSizeBytes`）
+* NonPaper側のファイル上限（`Upload:MaxFileSizeBytes`）と件数上限（`Upload:MaxDocuments`）
 * IISの`maxAllowedContentLength`（[10. web.configとアップロード上限](#10-web.configとアップロード上限)）
-* ASP.NET Core側のフォーム・リクエストサイズ上限
 * 複数ファイル同時アップロード時の合計容量
+
+NonPaperが返す413には、日本語の理由（ファイルサイズ超過、件数超過、要求全体の容量超過）が含まれます。理由が表示されずIISやブラウザーの既定エラー画面になる場合は、IIS側の`maxAllowedContentLength`で拒否されています。
 
 ## 16. HTTPS化
 

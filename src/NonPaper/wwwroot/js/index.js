@@ -1,15 +1,31 @@
-import { api, copy, showError } from './common.js';
+import { api, copyToClipboard, clearMessage, showError } from './common.js';
 
-document.querySelector('#create').addEventListener('submit', async event => {
+const form = document.querySelector('#create');
+const submit = form.querySelector('button');
+
+function isoDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+form.addEventListener('submit', async event => {
   event.preventDefault();
+  const startsAt = isoDate(starts.value);
+  const endsAt = isoDate(ends.value);
+  if (!startsAt || !endsAt) {
+    showError(new Error('開催日時と終了日時を入力してください。'));
+    return;
+  }
+  // 送信中の再クリックで会議が二重に作成されないようにする。
+  submit.disabled = true;
   try {
     const data = await api('/api/events', {
       method: 'POST',
       body: JSON.stringify({
         title: title.value,
         description: description.value,
-        startsAt: new Date(starts.value).toISOString(),
-        endsAt: new Date(ends.value).toISOString(),
+        startsAt,
+        endsAt,
       }),
     });
     const manage = new URL('/manage.html', location.origin);
@@ -20,11 +36,14 @@ document.querySelector('#create').addEventListener('submit', async event => {
     manageUrl.textContent = manage.href;
     meetingUrl.textContent = meeting.href;
     uploadLink.href = `/upload.html?${manage.searchParams}`;
+    clearMessage();
     result.classList.remove('hidden');
   } catch (e) {
     showError(e);
+  } finally {
+    submit.disabled = false;
   }
 });
 
 document.querySelectorAll('[data-copy]').forEach(button =>
-  button.addEventListener('click', () => copy(document.querySelector(`#${button.dataset.copy}`).textContent)));
+  button.addEventListener('click', () => copyToClipboard(document.querySelector(`#${button.dataset.copy}`).textContent)));

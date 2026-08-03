@@ -1,7 +1,34 @@
-import { api, eventId, token, showError } from './common.js';
+import { api, eventId, token, clearMessage, showError } from './common.js';
 
 let eventData;
-back.href = `/manage.html?event=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}`;
+let busy = false;
+back.href = `/manage.html?event=${encodeURIComponent(eventId ?? '')}&token=${encodeURIComponent(token ?? '')}`;
+
+function sorted() {
+  return [...(eventData?.documents ?? [])].sort((a, b) => a.order - b.order);
+}
+
+// 通信中は資料を操作できないようにし、二重登録や順序の取り違えを防ぐ。
+function setBusy(value) {
+  busy = value;
+  send.disabled = value;
+  documents.querySelectorAll('button').forEach(button => {
+    button.disabled = value || button.dataset.disabled === '1';
+  });
+}
+
+async function run(action) {
+  if (busy) return;
+  setBusy(true);
+  try {
+    await action();
+    clearMessage();
+  } catch (e) {
+    showError(e);
+  } finally {
+    setBusy(false);
+  }
+}
 
 async function load() {
   try {
@@ -14,77 +41,81 @@ async function load() {
 
 function render() {
   documents.replaceChildren();
-  const sorted = [...eventData.documents].sort((a, b) => a.order - b.order);
-  sorted.forEach((doc, index) => {
+  const list = sorted();
+  list.forEach((doc, index) => {
     const row = document.createElement('div');
     row.className = 'document';
     const name = document.createElement('strong');
     name.textContent = doc.title;
     row.append(name);
     [
-      ['名称変更', () => rename(doc)],
-      ['↑', () => move(index, -1)],
-      ['↓', () => move(index, 1)],
-      ['削除', () => remove(doc)],
-    ].forEach(([label, fn]) => {
-      const b = document.createElement('button');
-      b.textContent = label;
-      b.addEventListener('click', fn);
-      row.append(b);
+      ['名称変更', () => rename(doc), false],
+      ['↑', () => move(index, -1), index === 0],
+      ['↓', () => move(index, 1), index === list.length - 1],
+      ['削除', () => remove(doc), false],
+    ].forEach(([label, action, disabled]) => {
+      const button = document.createElement('button');
+      button.textContent = label;
+      if (disabled) {
+        button.disabled = true;
+        button.dataset.disabled = '1';
+      }
+      button.addEventListener('click', action);
+      row.append(button);
     });
     documents.append(row);
   });
-  if (!sorted.length) documents.textContent = '資料はまだありません。';
+  if (!list.length) documents.textContent = '資料はまだありません。';
 }
 
-async function rename(doc) {
+function rename(doc) {
   const value = prompt('新しい資料表示名', doc.title);
-  if (!value) return;
-  try {
+  if (value === null) return;
+  if (!value.trim()) {
+    showError(new Error('資料名を1～200文字で入力してください。'));
+    return;
+  }
+  return run(async () => {
     await api(`/api/events/${eventId}/documents/${doc.id}`, { method: 'PUT', body: JSON.stringify({ title: value }) }, true);
     await load();
-  } catch (e) {
-    showError(e);
-  }
+  });
 }
 
-async function move(index, delta) {
-  const sorted = [...eventData.documents].sort((a, b) => a.order - b.order);
+function move(index, delta) {
+  const list = sorted();
   const target = index + delta;
-  if (target < 0 || target >= sorted.length) return;
-  [sorted[index], sorted[target]] = [sorted[target], sorted[index]];
-  try {
-    await api(`/api/events/${eventId}/documents/order`, { method: 'PUT', body: JSON.stringify({ documentIds: sorted.map(x => x.id) }) }, true);
+  if (target < 0 || target >= list.length) return;
+  [list[index], list[target]] = [list[target], list[index]];
+  return run(async () => {
+    await api(`/api/events/${eventId}/documents/order`, { method: 'PUT', body: JSON.stringify({ documentIds: list.map(x => x.id) }) }, true);
     await load();
-  } catch (e) {
-    showError(e);
-  }
+  });
 }
 
-async function remove(doc) {
+function remove(doc) {
   if (!confirm(`資料「${doc.title}」を削除しますか？`)) return;
-  try {
+  return run(async () => {
     await api(`/api/events/${eventId}/documents/${doc.id}`, { method: 'DELETE' }, true);
     await load();
-  } catch (e) {
-    showError(e);
-  }
+  });
 }
 
-async function upload(list) {
-  if (!list.length) return;
+function upload(list) {
+  if (!list.length || busy) return;
   const form = new FormData();
   [...list].forEach(x => form.append('files', x));
   progress.textContent = 'アップロード処理中です…';
-  try {
-    await api(`/api/events/${eventId}/documents`, { method: 'POST', body: form }, true);
-    files.value = '';
-    progress.textContent = 'アップロードが完了しました。';
-    await load();
-  } catch (e) {
-    progress.textContent = '';
-    showError(e);
-  }
+  return run(async () => {
+    try {
+      await api(`/api/events/${eventId}/documents`, { method: 'POST', body: form }, true);
+      files.value = '';
+      progress.textContent = 'アップロードが完了しました。';
+      await load();
+    } catch (e) {
+      progress.textContent = '';
+      throw e;
+    }
+  });
 }
 
 send.addEventListener('click', () => upload(files.files));

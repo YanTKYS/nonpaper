@@ -13,6 +13,8 @@ public interface IEventRepository
     Task DeleteAsync(string eventId, CancellationToken ct = default);
     Task DeleteUpdatedAsync(string eventId, Action<EventRecord> beforeDelete, CancellationToken ct = default);
     string DocumentPath(string eventId, string documentId);
+    string DocumentStagingPath(string eventId, string documentId);
+    void CreateDocumentDirectory(string eventId);
 }
 
 public sealed class EventRepository : IEventRepository
@@ -132,20 +134,50 @@ public sealed class EventRepository : IEventRepository
         await gate.WaitAsync(ct);
         try
         {
+            // 認証と「削除中」状態の保存を削除と同じロック内で行うことで、
+            // 削除処理の途中に割り込んだ更新が削除済みイベントを復活させないようにする。
             if (beforeDelete is not null)
             {
-                var value = await ReadAsync(eventId, ct);
-                if (value is not null) beforeDelete(value);
+                var value = await ReadAsync(eventId, ct) ?? throw new KeyNotFoundException();
+                beforeDelete(value);
+                await WriteAsync(value, ct);
             }
-            if (Directory.Exists(EventDirectory(eventId))) Directory.Delete(EventDirectory(eventId), true);
+            var directory = EventDirectory(eventId);
+            if (Directory.Exists(directory)) await DeleteDirectoryAsync(directory, ct);
         }
         finally { gate.Release(); }
+    }
+
+    // 参加者へのPDF配信中はファイルハンドルが開いており、Windowsでは一時的に削除できないことがある。
+    private static async Task DeleteDirectoryAsync(string directory, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                Directory.Delete(directory, true);
+                return;
+            }
+            catch (Exception ex) when (attempt < 4 && ex is IOException or UnauthorizedAccessException)
+            {
+                await Task.Delay(200, ct);
+            }
+        }
     }
 
     public string DocumentPath(string eventId, string documentId)
     {
         ValidateId(eventId); ValidateId(documentId);
         return Path.Combine(EventDirectory(eventId), "documents", documentId + ".pdf");
+    }
+
+    /// <summary>アップロード中のPDFを書き込む一時ファイル。登録が確定した時点で <see cref="DocumentPath"/> へ移動する。</summary>
+    public string DocumentStagingPath(string eventId, string documentId) => DocumentPath(eventId, documentId) + ".uploading";
+
+    public void CreateDocumentDirectory(string eventId)
+    {
+        ValidateId(eventId);
+        Directory.CreateDirectory(Path.Combine(EventDirectory(eventId), "documents"));
     }
 
     private string EventDirectory(string id) => Path.Combine(root, id);

@@ -18,5 +18,3 @@ public static class EventStatusTransitions
         return CanTransition(current, next) ? null : "この状態へは変更できません。";
     }
 }
-
-public sealed class EventStateConflictException(string message) : Exception(message);

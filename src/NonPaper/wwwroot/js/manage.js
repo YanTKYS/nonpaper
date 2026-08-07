@@ -1,4 +1,4 @@
-import { api, copyToClipboard, eventId, token, localDate, clearMessage, showError } from './common.js';
+import { api, copyToClipboard, element, eventId, token, localDate, clearMessage, showError } from './common.js';
 
 let current;
 let busy = false;
@@ -11,10 +11,24 @@ const descriptions = {
 };
 const transitions = { draft: ['published', 'closed'], published: ['draft', 'closed'], closed: [] };
 const statusButtons = document.querySelectorAll('[data-status]');
+const view = {
+  title: element('title'),
+  description: element('description'),
+  dates: element('dates'),
+  status: element('status'),
+  statusDescription: element('statusDescription'),
+  count: element('count'),
+  upload: element('upload'),
+  deleteTitle: element('deleteTitle'),
+  details: element('details'),
+  danger: element('danger'),
+  copyMeeting: element('copyMeeting'),
+  remove: element('delete'),
+};
 
 function updateActions() {
-  statusDescription.textContent = descriptions[current.status] || '';
-  upload.classList.toggle('hidden', current.status !== 'draft');
+  view.statusDescription.textContent = descriptions[current.status] || '';
+  view.upload.classList.toggle('hidden', current.status !== 'draft');
   statusButtons.forEach(button =>
     button.classList.toggle('hidden', !transitions[current.status]?.includes(button.dataset.status)));
 }
@@ -23,22 +37,22 @@ function updateActions() {
 function setBusy(value) {
   busy = value;
   statusButtons.forEach(button => { button.disabled = value; });
-  document.querySelector('#delete').disabled = value;
+  view.remove.disabled = value;
 }
 
 async function load() {
   try {
     current = await api(`/api/events/${eventId}/manage`, {}, true);
-    title.textContent = current.title;
-    description.textContent = current.description || '（説明なし）';
-    dates.textContent = `${localDate(current.startsAt)} ～ ${localDate(current.endsAt)}`;
-    status.textContent = labels[current.status] ?? current.status;
-    count.textContent = `${current.documents.length}件`;
-    deleteTitle.textContent = current.title;
-    upload.href = `/upload.html?event=${encodeURIComponent(eventId ?? '')}&token=${encodeURIComponent(token ?? '')}`;
+    view.title.textContent = current.title;
+    view.description.textContent = current.description || '（説明なし）';
+    view.dates.textContent = `${localDate(current.startsAt)} ～ ${localDate(current.endsAt)}`;
+    view.status.textContent = labels[current.status] ?? current.status;
+    view.count.textContent = `${current.documents.length}件`;
+    view.deleteTitle.textContent = current.title;
+    view.upload.href = `/upload.html?event=${encodeURIComponent(eventId ?? '')}&token=${encodeURIComponent(token ?? '')}`;
     updateActions();
-    details.classList.remove('hidden');
-    danger.classList.remove('hidden');
+    view.details.classList.remove('hidden');
+    view.danger.classList.remove('hidden');
   } catch (e) {
     showError(e);
   }
@@ -62,16 +76,16 @@ statusButtons.forEach(button => button.addEventListener('click', async () => {
   }
 }));
 
-copyMeeting.addEventListener('click', () => copyToClipboard(`${location.origin}/meeting.html?event=${encodeURIComponent(eventId ?? '')}`));
+view.copyMeeting.addEventListener('click', () => copyToClipboard(`${location.origin}/meeting.html?event=${encodeURIComponent(eventId ?? '')}`));
 
-document.querySelector('#delete').addEventListener('click', async () => {
-  if (busy) return;
+view.remove.addEventListener('click', async () => {
+  if (busy || !current) return;
   if (!confirm(`イベント「${current.title}」を削除します。元に戻せません。よろしいですか？`)) return;
   setBusy(true);
   try {
     await api(`/api/events/${eventId}`, { method: 'DELETE' }, true);
-    details.classList.add('hidden');
-    danger.classList.add('hidden');
+    view.details.classList.add('hidden');
+    view.danger.classList.add('hidden');
     showError(new Error('このイベントは削除されました。'));
   } catch (e) {
     showError(e);

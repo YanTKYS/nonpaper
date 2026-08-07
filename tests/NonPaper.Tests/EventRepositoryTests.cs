@@ -140,7 +140,7 @@ public sealed class EventRepositoryTests : IDisposable
         var value = Event();
         await repository.SaveAsync(value);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<ManagementTokenException>(() =>
             Service(repository).DeleteAuthorizedAsync(value.Id, "invalid-token", default));
 
         Assert.NotNull(await repository.GetAsync(value.Id));

@@ -149,17 +149,22 @@ public sealed class EventRepository : IEventRepository
     }
 
     // 参加者へのPDF配信中はファイルハンドルが開いており、Windowsでは一時的に削除できないことがある。
+    // 数回の再試行でも解消しない場合は、時間をおいた再実行で解消できることが分かる例外へ変換する。
+    private const int DeleteAttempts = 5;
+
     private static async Task DeleteDirectoryAsync(string directory, CancellationToken ct)
     {
-        for (var attempt = 0; ; attempt++)
+        for (var attempt = 1; ; attempt++)
         {
             try
             {
                 Directory.Delete(directory, true);
                 return;
             }
-            catch (Exception ex) when (attempt < 4 && ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
+                if (attempt >= DeleteAttempts)
+                    throw new StorageBusyException("資料ファイルが使用中のため削除できませんでした。しばらく待ってから、もう一度削除してください。", ex);
                 await Task.Delay(200, ct);
             }
         }

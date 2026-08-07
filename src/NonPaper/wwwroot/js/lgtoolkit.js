@@ -358,13 +358,21 @@
 
             if (bytes === 0) return '0 ' + BYTE_UNITS[0];
 
+            var decimalPlaces = Math.floor(decimals);
             // 単位表を超える巨大な値でも undefined にならないよう、添字を上限で丸める
             var unitIndex = Math.min(
                 BYTE_UNITS.length - 1,
                 Math.floor(Math.log(bytes) / Math.log(BYTES_PER_UNIT))
             );
             var value = bytes / Math.pow(BYTES_PER_UNIT, unitIndex);
-            return value.toFixed(Math.floor(decimals)) + ' ' + BYTE_UNITS[unitIndex];
+
+            // 丸めで桁が繰り上がる場合（例: 1048575 は "1024.0 KB" ではなく "1.0 MB"）は、
+            // ひとつ上の単位へ揃える。
+            if (unitIndex < BYTE_UNITS.length - 1 && Number(value.toFixed(decimalPlaces)) >= BYTES_PER_UNIT) {
+                unitIndex++;
+                value = bytes / Math.pow(BYTES_PER_UNIT, unitIndex);
+            }
+            return value.toFixed(decimalPlaces) + ' ' + BYTE_UNITS[unitIndex];
         }
     };
 

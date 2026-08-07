@@ -1,7 +1,25 @@
-import { api, eventId, localDate, clearMessage, showError } from './common.js';
+import { api, element, eventId, localDate, clearMessage, showError } from './common.js';
 
 const pollIntervalMs = 30000;
 const defaultZoom = 100;
+
+const view = {
+  title: element('title'),
+  description: element('description'),
+  dates: element('dates'),
+  meeting: element('meeting'),
+  documents: element('documents'),
+  selected: element('selected'),
+  pdf: element('pdf'),
+  viewer: element('viewer'),
+  page: element('page'),
+  previous: element('previous'),
+  next: element('next'),
+  zoomIn: element('zoomIn'),
+  zoomOut: element('zoomOut'),
+  fit: element('fit'),
+  fullscreen: element('fullscreen'),
+};
 
 let currentDocuments = [];
 let selectedId = null;
@@ -19,14 +37,14 @@ function source() {
 }
 
 function refresh() {
-  if (selectedId) pdf.src = source();
-  page.value = pageNumber;
+  if (selectedId) view.pdf.src = source();
+  view.page.value = pageNumber;
 }
 
 function markSelection() {
   const document_ = currentDocuments.find(x => x.id === selectedId);
-  selected.textContent = document_ ? document_.title : '';
-  documents.querySelectorAll('.document-button').forEach(button =>
+  view.selected.textContent = document_ ? document_.title : '';
+  view.documents.querySelectorAll('.document-button').forEach(button =>
     button.classList.toggle('active', button.dataset.documentId === selectedId));
 }
 
@@ -39,11 +57,11 @@ function select(id) {
 }
 
 function renderDocuments() {
-  documents.replaceChildren();
+  view.documents.replaceChildren();
   // iframeは残したまま表示だけ切り替える。要素ごと差し替えると資料追加後に表示できなくなる。
-  pdf.classList.toggle('hidden', currentDocuments.length === 0);
+  view.pdf.classList.toggle('hidden', currentDocuments.length === 0);
   if (!currentDocuments.length) {
-    documents.textContent = '登録されている資料はありません。';
+    view.documents.textContent = '登録されている資料はありません。';
     return;
   }
   currentDocuments.forEach(item => {
@@ -52,7 +70,7 @@ function renderDocuments() {
     button.dataset.documentId = item.id;
     button.textContent = item.title;
     button.addEventListener('click', () => select(item.id));
-    documents.append(button);
+    view.documents.append(button);
   });
 }
 
@@ -67,14 +85,14 @@ async function load() {
     data = await api(`/api/events/${eventId}`);
   } catch (e) {
     // 会議の終了・削除・下書きへの差し戻しは、ここで閲覧終了として扱う。
-    meeting.classList.add('hidden');
+    view.meeting.classList.add('hidden');
     showError(e);
     return;
   }
 
-  title.textContent = data.title;
-  description.textContent = data.description || '（説明なし）';
-  dates.textContent = `${localDate(data.startsAt)} ～ ${localDate(data.endsAt)}`;
+  view.title.textContent = data.title;
+  view.description.textContent = data.description || '（説明なし）';
+  view.dates.textContent = `${localDate(data.startsAt)} ～ ${localDate(data.endsAt)}`;
 
   // 定期取得のたびに一覧を作り直すと、閲覧中の資料とページが先頭へ戻ってしまう。
   // 資料の構成が変わったときだけ描画し、選択中の資料は維持する。
@@ -91,39 +109,39 @@ async function load() {
   }
 
   clearMessage();
-  meeting.classList.remove('hidden');
+  view.meeting.classList.remove('hidden');
 }
 
-previous.addEventListener('click', () => {
+view.previous.addEventListener('click', () => {
   if (pageNumber <= 1) return;
   pageNumber -= 1;
   refresh();
 });
-next.addEventListener('click', () => {
+view.next.addEventListener('click', () => {
   pageNumber += 1;
   refresh();
 });
-page.addEventListener('change', () => {
-  pageNumber = Math.max(1, Math.floor(Number(page.value)) || 1);
+view.page.addEventListener('change', () => {
+  pageNumber = Math.max(1, Math.floor(Number(view.page.value)) || 1);
   refresh();
 });
-zoomIn.addEventListener('click', () => {
+view.zoomIn.addEventListener('click', () => {
   // 「領域に合わせる」の後でも拡大・縮小を続けられるよう、倍率は常に数値で保持する。
   fitToWidth = false;
   zoomPercent = Math.min(300, zoomPercent + 25);
   refresh();
 });
-zoomOut.addEventListener('click', () => {
+view.zoomOut.addEventListener('click', () => {
   fitToWidth = false;
   zoomPercent = Math.max(25, zoomPercent - 25);
   refresh();
 });
-fit.addEventListener('click', () => {
+view.fit.addEventListener('click', () => {
   fitToWidth = true;
   refresh();
 });
-fullscreen.addEventListener('click', () => {
-  const request = viewer.requestFullscreen();
+view.fullscreen.addEventListener('click', () => {
+  const request = view.viewer.requestFullscreen();
   if (request?.catch) request.catch(() => showError(new Error('全画面表示を開始できませんでした。')));
 });
 
@@ -136,14 +154,20 @@ document.addEventListener('keydown', e => {
   // ページ番号の入力中は、左右キーをカーソル移動として扱う。
   const tag = e.target?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-  if (e.key === 'ArrowRight') next.click();
-  if (e.key === 'ArrowLeft') previous.click();
+  if (e.key === 'ArrowRight') view.next.click();
+  if (e.key === 'ArrowLeft') view.previous.click();
 });
 document.addEventListener('contextmenu', e => e.preventDefault());
 
 // 前回の取得が終わってから次を予約し、通信が遅い環境で要求が積み上がらないようにする。
+// 想定外の例外が起きても定期取得を止めない（止まると会議終了に気付けなくなる）。
 async function poll() {
-  await load();
-  window.setTimeout(poll, pollIntervalMs);
+  try {
+    await load();
+  } catch (e) {
+    showError(e);
+  } finally {
+    window.setTimeout(poll, pollIntervalMs);
+  }
 }
 poll();

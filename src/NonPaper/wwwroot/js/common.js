@@ -2,8 +2,19 @@ export const query = new URLSearchParams(location.search);
 export const eventId = query.get('event');
 export const token = query.get('token');
 
+/**
+ * id属性から要素を取得する。
+ * idと同名のグローバル変数（window.status など）を暗黙に参照すると、
+ * 既存のwindowプロパティが優先されて要素を取得できないため、必ずこの関数を使う。
+ */
+export function element(id) {
+  const found = document.getElementById(id);
+  if (!found) throw new Error(`画面を初期化できませんでした（要素 ${id} がありません）。`);
+  return found;
+}
+
 function messageElement() {
-  return document.querySelector('#message');
+  return document.getElementById('message');
 }
 
 function show(target, className, text) {

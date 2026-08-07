@@ -35,14 +35,14 @@ public sealed class EventService(IEventRepository repository, IConfiguration con
     public async Task<EventRecord> AuthorizedAsync(string id, string? token, CancellationToken ct)
     {
         var e = await repository.GetAsync(id, ct) ?? throw new KeyNotFoundException();
-        if (!TokenMatches(e, token)) throw new UnauthorizedAccessException();
+        if (!TokenMatches(e, token)) throw new ManagementTokenException();
         return e;
     }
 
     public Task<EventRecord> UpdateAuthorizedAsync(string id, string? token, Action<EventRecord> update, CancellationToken ct) =>
         repository.UpdateAsync(id, value =>
         {
-            if (!TokenMatches(value, token)) throw new UnauthorizedAccessException();
+            if (!TokenMatches(value, token)) throw new ManagementTokenException();
             update(value);
         }, ct);
 
@@ -50,7 +50,7 @@ public sealed class EventService(IEventRepository repository, IConfiguration con
     public Task<TResult> UpdateAuthorizedAsync<TResult>(string id, string? token, Func<EventRecord, TResult> update, CancellationToken ct) =>
         repository.UpdateAsync(id, value =>
         {
-            if (!TokenMatches(value, token)) throw new UnauthorizedAccessException();
+            if (!TokenMatches(value, token)) throw new ManagementTokenException();
             return update(value);
         }, ct);
 
@@ -68,7 +68,7 @@ public sealed class EventService(IEventRepository repository, IConfiguration con
         // 認証、「削除中」の保存、実体の削除を同一ロック内で実行する。
         await repository.DeleteUpdatedAsync(id, value =>
         {
-            if (!TokenMatches(value, token)) throw new UnauthorizedAccessException();
+            if (!TokenMatches(value, token)) throw new ManagementTokenException();
             value.Status = "deleting";
             value.UpdatedAt = DateTimeOffset.Now;
         }, ct);

@@ -51,10 +51,11 @@ static bool MutatingAllowed(HttpRequest r) => r.Headers["X-NonPaper-Request"] ==
 static IResult? Failure(Exception exception) => exception switch
 {
     RequestValidationException e => Problem(e.Message),
-    UnauthorizedAccessException => Problem("管理用URLが正しくありません。", 401),
+    ManagementTokenException e => Problem(e.Message, 401),
     DocumentNotFoundException e => Problem(e.Message, 404),
     EventStateConflictException e => Problem(e.Message, 409),
     UploadLimitException e => Problem(e.Message, 413),
+    StorageBusyException e => Problem(e.Message, 503),
     ArgumentException or KeyNotFoundException => Problem("イベントが存在しないか、既に終了・削除されています。", 404),
     _ => null,
 };
@@ -167,7 +168,9 @@ app.MapDelete("/api/events/{id}", (string id, HttpRequest req, EventService serv
 }));
 
 app.Map("/error", () => Problem("処理中にエラーが発生しました。", 500));
-app.Lifetime.ApplicationStarted.Register(() => app.Logger.LogInformation("NonPaper v0.1.1 を起動しました"));
+// バージョン表記が実体とずれないよう、アセンブリのバージョンから組み立てる。
+var version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "";
+app.Lifetime.ApplicationStarted.Register(() => app.Logger.LogInformation("NonPaper v{Version} を起動しました", version));
 app.Lifetime.ApplicationStopping.Register(() => app.Logger.LogInformation("NonPaper を停止します"));
 app.Run();
 

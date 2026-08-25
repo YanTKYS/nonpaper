@@ -62,9 +62,7 @@ async function copy(text) {
       await navigator.clipboard.writeText(text);
       return true;
     }
-  } catch {
-    // フォールバックを試す
-  }
+  } catch { }
   const area = document.createElement('textarea');
   area.value = text;
   area.readOnly = true;

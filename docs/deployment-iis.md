@@ -2,18 +2,12 @@
 
 閉域内のWindows Server（IIS）へNonPaperを配置し、実機確認を行うための手順書です。実機確認は最初からIIS上で行い、Kestrelの単体起動は使用しません。
 
-## 1. 目的
-
-* NonPaperをIISへ配置する手順を、誰が実施しても再現できる形で明文化する。
-* GitHub Releaseで生成されるリリースZIPの内容と、本手順書の記載を一致させる。
-* アプリケーション本体と会議データ（イベント・PDF）を分離し、更新時にデータを誤って失わない配置を示す。
-
-## 2. 想定構成
+## 1. 想定構成
 
 * 配置先：閉域内のWindows Server + IIS
 * 実機確認：IIS上で実施（Kestrel単体起動は使用しない）
 * 初期実機確認：HTTP、ポート`5080`の独立Webサイト
-* 本番運用時のHTTPS化：[16. HTTPS化](#16-https化)を参照
+* 本番運用時のHTTPS化：[15. HTTPS化](#15-https化)を参照
 * リリース成果物の取得：インターネット接続環境でGitHub Releaseを作成し、生成されたZIPを閉域へ持ち込む
 
 ```text
@@ -27,7 +21,7 @@
   C:\ProgramData\NonPaper\    ← 会議データ（events）
 ```
 
-## 3. 前提ソフトウェア
+## 2. 前提ソフトウェア
 
 * Windows ServerまたはIISを利用できるWindows端末
 * IIS（Webサーバー機能、および「Webサーバー」役割サービス）
@@ -40,7 +34,7 @@ NonPaperのリリースZIPは自己完結型（self-contained）発行のため.
 
 Hosting Bundle導入後は、IISまたはサーバー自体の再起動が必要になる場合があります。導入直後にアプリが起動しない場合は、まず再起動を試してください。
 
-## 4. リリースZIPの確認
+## 3. リリースZIPの確認
 
 配置作業を始める前に、GitHub Releaseから取得したZIPを展開し、内容を確認します。`release.yml`は展開後に必要ファイルが揃っていることを自動検証したうえでZIPを作成していますが、配置前にも目視で確認してください。
 
@@ -67,9 +61,9 @@ js\    （JavaScriptファイルを含む）
 
 自己完結型単一ファイル発行の結果によっては、上記に加えてネイティブライブラリ等の追加ファイルが含まれる場合があります。ZIP内のファイルは取捨選択せず、原則そのまま配置先へコピーしてください。
 
-いずれかのファイルが不足している場合は、そのままIISへ配置せず、[16. リリースワークフローの点検・修正](#16-リリースワークフローの点検修正)を参照してリリースワークフロー側を修正してください。
+いずれかのファイルが不足している場合は、そのままIISへ配置しないでください。リリースワークフロー（`.github/workflows/release.yml`）はパッケージ化の前後で必須ファイルの存在を検証するため、不足はワークフロー側の不具合です。検証条件と発行設定を確認してください。
 
-## 5. フォルダー構成
+## 4. フォルダー構成
 
 アプリケーションファイルと会議データを分離し、それぞれ独立したフォルダーへ配置します。
 
@@ -95,7 +89,7 @@ C:\ProgramData\NonPaper\
 
 アプリケーション更新時に会議データを誤って削除しないよう、会議データは`C:\inetpub\nonpaper`配下には保存しません。アプリ配置先とデータ保存先を明確に分離することが、この構成の目的です。
 
-## 6. データ保存先の設定
+## 5. データ保存先の設定
 
 `appsettings.json`の`Storage:Root`を、閉域環境のデータ保存先へ絶対パスで指定します。リリースZIPに含まれる既定の`appsettings.json`はリポジトリ内の相対パス（`data/events`）のままなので、配置時に次のように統合してください（ファイル全体を上書きするのではなく、既存のキーを書き換えます）。
 
@@ -132,7 +126,7 @@ C:\ProgramData\NonPaper\
 New-Item -ItemType Directory -Path "C:\ProgramData\NonPaper\events" -Force
 ```
 
-## 7. IISアプリケーションプールの作成
+## 6. IISアプリケーションプールの作成
 
 NonPaper専用のアプリケーションプールを作成します。
 
@@ -153,7 +147,7 @@ NonPaper専用のアプリケーションプールを作成します。
 * アイドルタイムアウト：`0`（無効化）
 * サイトのプリロード：有効
 
-## 8. IIS Webサイトの作成
+## 7. IIS Webサイトの作成
 
 初回の実機確認では、既存サイト配下ではなく独立したWebサイトとして作成することを推奨します。
 
@@ -176,7 +170,7 @@ http://サーバー名:5080/
 
 既存サイト配下へ`/nonpaper/`のような仮想アプリケーションとして配置することも可能ですが、NonPaperはルート相対パスでAPIやリソースを参照している箇所があるため、独立サイトでのルートパス動作を確認できるまでは推奨しません。仮想アプリケーションとして配置する場合は、画面遷移・API呼び出し・静的ファイル参照が正しく動作するか別途確認してください。
 
-## 9. NTFS権限の設定
+## 8. NTFS権限の設定
 
 アプリ配置先とデータ保存先で、付与する権限を明確に分けます。
 
@@ -216,7 +210,7 @@ Set-Acl -Path $path -AclObject $acl
   Where-Object IdentityReference -Like "*NonPaperPool*"
 ```
 
-## 10. web.configとアップロード上限
+## 9. web.configとアップロード上限
 
 リリースZIPに含まれる`web.config`は`dotnet publish`が自動生成したものであり、自己完結型EXEをIISで起動するために必要な設定（`AspNetCoreModuleV2`ハンドラー、`processPath`等）を含んでいます。この`web.config`をそのまま使用してください。手作業でのテンプレート差し替えは不要です。
 
@@ -249,7 +243,7 @@ Set-Acl -Path $path -AclObject $acl
 
 （`processPath`は自己完結型EXEへの相対パスです。`dotnet`コマンドは指定しません。）
 
-`release.yml`は発行後の`web.config`へ`requestLimits`（`maxAllowedContentLength`）を自動的に追加しているため、リリースZIP内の`web.config`にはこの設定が最初から含まれています。含まれていない場合はリリースワークフローの不具合なので、[16. リリースワークフローの点検・修正](#16-リリースワークフローの点検修正)を確認してください。
+`release.yml`は発行後の`web.config`へ`requestLimits`（`maxAllowedContentLength`）を自動的に追加しているため、リリースZIP内の`web.config`にはこの設定が最初から含まれています。含まれていない場合はリリースワークフロー（`.github/workflows/release.yml`）の不具合です。
 
 ### アップロード上限について
 
@@ -263,7 +257,7 @@ NonPaper側の1ファイル上限が100 MiB（`Upload:MaxFileSizeBytes`）であ
 
 ASP.NET Core側（Kestrel/IIS統合）の要求本文サイズ上限は既定で30 MB前後ですが、NonPaperはPDF登録APIに限り`Upload:MaxFileSizeBytes` × `Upload:MaxDocuments`まで上限を引き上げます。したがって`appsettings.json`の値を変更すればアプリケーション側の上限も追従し、追加の設定は不要です。IIS側の`maxAllowedContentLength`だけは`web.config`で別途調整してください。
 
-## 11. サイト起動と接続確認
+## 10. サイト起動と接続確認
 
 1. IISマネージャーで`NonPaper`サイトとアプリケーションプール`NonPaperPool`が「開始」状態であることを確認します。
 2. サーバー上のブラウザーで`http://localhost:5080/`へアクセスし、トップページが表示されることを確認します。
@@ -287,7 +281,7 @@ New-NetFirewallRule `
 Remove-NetFirewallRule -DisplayName "NonPaper IIS TCP 5080"
 ```
 
-## 12. 実機確認項目
+## 11. 実機確認項目
 
 IIS上で次の一連の動作を確認します。
 
@@ -348,7 +342,7 @@ documents\{documentId}.pdf
 {eventId}フォルダーが存在しない
 ```
 
-## 13. アプリケーション更新手順
+## 12. アプリケーション更新手順
 
 単にリリースZIPを既存フォルダーへ上書きすると、旧バージョンで使われていた不要なファイルが残る可能性があるため、原則として新しいフォルダーへ展開してから差し替えます。
 
@@ -356,13 +350,13 @@ documents\{documentId}.pdf
 2. IISサイトまたはアプリケーションプールを停止します。
 3. `C:\inetpub\nonpaper`をバックアップします（別フォルダーへコピー、またはアーカイブ化）。
 4. 新しいリリースZIPを別フォルダー（例：`C:\inetpub\nonpaper_new`）へ展開します。
-5. `appsettings.json`の環境固有設定（`Storage:Root`等、[6. データ保存先の設定](#6-データ保存先の設定)で行った変更）を新しいフォルダーへ引き継ぎます。
+5. `appsettings.json`の環境固有設定（`Storage:Root`等、[5. データ保存先の設定](#5-データ保存先の設定)で行った変更）を新しいフォルダーへ引き継ぎます。
 6. `C:\inetpub\nonpaper`の内容を、展開した新しいフォルダーの内容で差し替えます。
 7. データ保存先`C:\ProgramData\NonPaper\events`には手を加えません。
 8. IISサイトまたはアプリケーションプールを開始します。
 9. トップ画面表示、イベント作成、既存イベントのPDF閲覧を確認します。
 
-## 14. バックアップと復元
+## 13. バックアップと復元
 
 バックアップ対象は会議データのみです。
 
@@ -376,7 +370,7 @@ C:\ProgramData\NonPaper\events
 
 アプリケーション本体（実行ファイル一式）はGitHub Releaseから何度でも再取得できるため、バックアップ対象は会議データを優先してください。
 
-## 15. 障害時の確認
+## 14. 障害時の確認
 
 ### 500.19
 
@@ -425,12 +419,12 @@ C:\inetpub\nonpaper\logs
 確認事項：
 
 * NonPaper側のファイル上限（`Upload:MaxFileSizeBytes`）と件数上限（`Upload:MaxDocuments`）
-* IISの`maxAllowedContentLength`（[10. web.configとアップロード上限](#10-web.configとアップロード上限)）
+* IISの`maxAllowedContentLength`（[9. web.configとアップロード上限](#9-webconfigとアップロード上限)）
 * 複数ファイル同時アップロード時の合計容量
 
 NonPaperが返す413には、日本語の理由（ファイルサイズ超過、件数超過、要求全体の容量超過）が含まれます。理由が表示されずIISやブラウザーの既定エラー画面になる場合は、IIS側の`maxAllowedContentLength`で拒否されています。
 
-## 16. HTTPS化
+## 15. HTTPS化
 
 閉域環境での初期実機確認はHTTPで問題ありませんが、本番運用ではHTTPS化を行ってください。
 
@@ -439,22 +433,10 @@ NonPaperが返す413には、日本語の理由（ファイルサイズ超過、
 * HTTPS化後は、HTTPアクセスをHTTPSへリダイレクトする設定、または不要なHTTPバインドの削除を検討してください。
 * 管理用URLは管理トークンを含む秘密情報であるため、本番運用ではHTTPSの利用を強く推奨します（README「セキュリティと制約」も参照）。
 
-## 17. 制約と注意事項
+## 16. IIS配置時の注意事項
 
-* NonPaperはSPA、データベース、外部API、CDNを使用しません。
-* イベント状態は`draft`→`published`→`closed`と遷移し、`closed`は終端状態です。終了した会議は再公開できません（詳細はREADMEの「イベントの状態遷移」を参照）。
-* 管理用URLはパスワード同等の秘密情報です。メール転送、ブラウザー履歴、アクセスログへの記録に注意してください。
-* 通常の画面操作ではPDFのダウンロード・印刷機能を提供しません。ただしブラウザーへデータを送信する性質上、開発者ツールでの取得、ブラウザー固有機能、キャッシュ、画面キャプチャー、外部からの撮影を完全に防止することはできません。
-* 既存サイト配下への`/nonpaper/`仮想アプリケーション配置は、ルートパス依存の動作確認が済むまで推奨しません。
+* 既存サイト配下への `/nonpaper/` 仮想アプリケーション配置は、ルートパス依存の動作確認が済むまで推奨しません。
+* 管理用URLは管理トークンを含む秘密情報です。IISのログでクエリ文字列を記録している場合、ログの取り扱いに注意してください。
+* 会議データはアプリ配置先の外（`C:\ProgramData\NonPaper\events`）にあります。アプリ更新の対象へこのフォルダーを含めないでください。
 
----
-
-## 参考：リリースワークフローの点検・修正
-
-`.github/workflows/release.yml`は、この手順書と実際のリリースZIPの内容が一致するよう、次の対応を行っています。
-
-* `dotnet publish`の出力（`wwwroot`等のサブディレクトリを含む）を再帰的にステージングフォルダーへコピーし、`.pdb`・`.xml`のみを除外します（`appsettings.json`や`web.config`は除外しません）。
-* パッケージ化前に`publish`フォルダー、パッケージ化後にステージングフォルダーのそれぞれで、`NonPaper.exe`・`appsettings.json`・`web.config`・`wwwroot`配下の各画面ファイル・CSS・JavaScriptの存在を検証し、不足があればワークフローを失敗させます。
-* `dotnet publish`が生成した`web.config`へ、IIS側のアップロード上限（`requestLimits`の`maxAllowedContentLength`、250 MiB）を自動的に追加します。
-
-このため、GitHub Releaseで生成されたZIPをそのまま展開すれば、本手順書の[4. リリースZIPの確認](#4-リリースzipの確認)〜[10. web.configとアップロード上限](#10-web.configとアップロード上限)の記載どおりに配置できます。
+イベントの状態遷移、PDFのダウンロード・印刷に関する性質など、システムとしての仕様は [README.md](../README.md) を正本とします。

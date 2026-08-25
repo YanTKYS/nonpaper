@@ -20,8 +20,8 @@ public interface IEventRepository
 public sealed class EventRepository : IEventRepository
 {
     private readonly string root;
-    // Entries deliberately live for the process lifetime. Removing an entry while a waiter still
-    // holds its semaphore can create two independent locks for the same event.
+    // エントリーは意図的にプロセスの寿命まで残す。待機者がいる状態で辞書から取り除くと、
+    // 同じイベントに対して独立した2つのロックが並存し、イベント単位の排他が成立しなくなる。
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks = new();
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 

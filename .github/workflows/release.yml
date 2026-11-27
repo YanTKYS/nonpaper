@@ -161,6 +161,26 @@ jobs:
 
           Copy-Item "README.md" -Destination $stageDir -Force
 
+          # MIT Licenseの全文と第三者ソフトウェアの通知をZIPへ同梱する。
+          Copy-Item "LICENSE" -Destination $stageDir -Force
+          Copy-Item "THIRD-PARTY-NOTICES.md" -Destination $stageDir -Force
+
+          # 自己完結型発行でEXEに内包される.NETランタイムのライセンスと通知を、
+          # 発行時に取得されたランタイムパッケージから変更せずに同梱する。
+          $noticeDir = Join-Path $stageDir "third-party-licenses"
+          New-Item -ItemType Directory -Path $noticeDir -Force | Out-Null
+          $packageRoot = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path $env:USERPROFILE ".nuget\packages" }
+          foreach ($pack in @("microsoft.netcore.app.runtime.win-x64", "microsoft.aspnetcore.app.runtime.win-x64")) {
+            $packDir = Join-Path $packageRoot $pack
+            if (-not (Test-Path $packDir)) { throw "Runtime package not found in NuGet cache: $packDir" }
+            $versionDir = Get-ChildItem $packDir -Directory | Sort-Object { [version]($_.Name -replace '[-+].*$', '') } | Select-Object -Last 1
+            foreach ($name in @("LICENSE.txt", "THIRD-PARTY-NOTICES.TXT")) {
+              $src = Join-Path $versionDir.FullName $name
+              if (-not (Test-Path $src)) { throw "$name not found in $($versionDir.FullName)" }
+              Copy-Item $src -Destination (Join-Path $noticeDir "$pack-$name") -Force
+            }
+          }
+
           $zipPath = Join-Path "artifacts" "$dirName.zip"
           Compress-Archive -Path $stageDir -DestinationPath $zipPath -Force
 
@@ -177,6 +197,8 @@ jobs:
             "appsettings.json",
             "web.config",
             "README.md",
+            "LICENSE",
+            "THIRD-PARTY-NOTICES.md",
             "wwwroot\index.html",
             "wwwroot\manage.html",
             "wwwroot\upload.html",
@@ -187,6 +209,9 @@ jobs:
             if (-not (Test-Path $path)) {
               throw "Required file missing from staged release: $path"
             }
+          }
+          if (-not (Get-ChildItem (Join-Path $stageDir "third-party-licenses") -File -ErrorAction SilentlyContinue)) {
+            throw "No license notices found under third-party-licenses in staged release"
           }
 
       # ── Create GitHub Release ─────────────────────────────────────────────────

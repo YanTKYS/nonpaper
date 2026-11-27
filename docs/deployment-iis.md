@@ -46,6 +46,9 @@ wwwroot\
 appsettings.json
 web.config
 README.md
+LICENSE
+THIRD-PARTY-NOTICES.md
+third-party-licenses\   （.NETランタイムのライセンス・通知）
 ```
 
 `wwwroot`には最低限次が含まれていることを確認します。
@@ -59,7 +62,7 @@ css\   （CSSファイルを含む）
 js\    （JavaScriptファイルを含む）
 ```
 
-自己完結型単一ファイル発行の結果によっては、上記に加えてネイティブライブラリ等の追加ファイルが含まれる場合があります。ZIP内のファイルは取捨選択せず、原則そのまま配置先へコピーしてください。
+自己完結型単一ファイル発行の結果によっては、上記に加えてネイティブライブラリ等の追加ファイルが含まれる場合があります。ZIP内のファイルは取捨選択せず、原則そのまま配置先へコピーしてください。`LICENSE`、`THIRD-PARTY-NOTICES.md`、`third-party-licenses\\`は.NETランタイム等のライセンス条件に基づく同梱物であり、配置先にも残してください（`wwwroot`の外にあるため、Webからは配信されません）。
 
 いずれかのファイルが不足している場合は、そのままIISへ配置しないでください。リリースワークフロー（`.github/workflows/release.yml`）はパッケージ化の前後で必須ファイルの存在を検証するため、不足はワークフロー側の不具合です。検証条件と発行設定を確認してください。
 
@@ -75,7 +78,10 @@ C:\inetpub\nonpaper\
 ├─ appsettings.json
 ├─ web.config
 ├─ wwwroot\
-└─ README.md
+├─ third-party-licenses\
+├─ README.md
+├─ LICENSE
+└─ THIRD-PARTY-NOTICES.md
 ```
 
 （自己完結型発行の結果に応じて、上記以外のファイルが含まれる場合はそのまま配置します。）

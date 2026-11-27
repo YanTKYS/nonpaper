@@ -55,8 +55,13 @@ PDFは静的領域に置かず、公開状態と資料所属を確認するRange
 
 通常の画面操作では、PDFのダウンロードおよび印刷機能を提供しません。ツールバーを隠し、ダウンロード/印刷ボタンを設けず、右クリックとCtrl+Pを抑止し、印刷CSSで内容を非表示にします。ただしブラウザーへデータを送るため、開発者ツールによる取得、ブラウザー固有機能、キャッシュ、画面キャプチャー、外部撮影を完全には防止できません。
 
-## 外部依存関係とライセンス
+## ライセンス
 
-サーバーは.NET 8（Microsoftライセンス）、テストはxUnit（Apache-2.0）を使用します。PDF表示は現行ブラウザー内蔵PDFレンダラーをツールバー非表示で利用し、PDF.jsやCDN配信物は同梱していません。
+このリポジトリの自作部分（`src/`、`tests/`、`docs/`、`.github/`、`README.md`）は [MIT License](LICENSE)（Copyright (c) 2026 YanTKYS）で提供します。
+
+MIT Licenseの対象外：
+
+* 第三者のソフトウェア：サーバーは.NET 8（MIT License）、テストはxUnit（Apache-2.0）を使用します。PDF表示は現行ブラウザー内蔵PDFレンダラーをツールバー非表示で利用し、PDF.jsやCDN配信物は同梱していません。それぞれの元のライセンスに従います。GitHub ReleaseのZIPに含まれる.NETランタイムのライセンスと通知は [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) およびZIP内の `third-party-licenses\` に記載しています。
+* 利用者のデータ：アップロードされるPDF、会議名・説明などの会議情報、アプリが保存するデータは利用者のものであり、MIT Licenseは適用されません。
 
 詳細な責務境界は [docs/architecture.md](docs/architecture.md) を参照してください。

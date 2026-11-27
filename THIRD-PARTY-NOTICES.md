@@ -11,7 +11,7 @@ GitHub Release の ZIP は、.NET 8 の自己完結型（self-contained）・単
 | .NET Runtime（Microsoft.NETCore.App） | Microsoft / .NET Foundation and Contributors | MIT License |
 | ASP.NET Core Runtime（Microsoft.AspNetCore.App） | Microsoft / .NET Foundation and Contributors | MIT License |
 
-これらのライセンス全文と、ランタイムが取り込む第三者ソフトウェアの通知は、ZIP 内の `third-party-licenses\` フォルダーに、リリース作成時に取得した .NET ランタイムパッケージの `LICENSE.txt` と `THIRD-PARTY-NOTICES.TXT` として同梱します。元のライセンスと通知は変更せずそのまま保持してください。
+これらのライセンス全文と、ランタイムが取り込む第三者ソフトウェアの通知は、ZIP 内の `third-party-licenses\` フォルダーに、リリース作成時に取得した .NET ランタイムパッケージの `LICENSE.txt` と `THIRD-PARTY-NOTICES.TXT` として、発行に使用した版のものを同梱します。元のライセンスと通知は変更せずそのまま保持してください。
 
 上記のランタイム以外の第三者コード・ライブラリ・フォント・画像は ZIP に含めていません。IIS 側の ASP.NET Core Hosting Bundle（`AspNetCoreModuleV2`）は ZIP に含まれず、Microsoft のライセンス条件に従って別途導入します。
 

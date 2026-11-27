@@ -166,19 +166,31 @@ jobs:
           Copy-Item "THIRD-PARTY-NOTICES.md" -Destination $stageDir -Force
 
           # 自己完結型発行でEXEに内包される.NETランタイムのライセンスと通知を、
-          # 発行時に取得されたランタイムパッケージから変更せずに同梱する。
+          # 変更せずに同梱する。ランタイムのバージョンはNuGetキャッシュ内の最新版
+          # ではなく、今回のrestoreで解決された版（obj/project.assets.json の
+          # downloadDependencies）から取得し、実際に発行へ使用した版と一致させる。
+          $assets = Get-Content "src\NonPaper\obj\project.assets.json" -Raw | ConvertFrom-Json
+          $packageRoot = @($assets.packageFolders.PSObject.Properties.Name)[0]
+          if (-not $packageRoot) { throw "NuGet package folder not found in project.assets.json" }
+          $downloads = @()
+          foreach ($framework in $assets.project.frameworks.PSObject.Properties) {
+            $downloads += @($framework.Value.downloadDependencies)
+          }
+
           $noticeDir = Join-Path $stageDir "third-party-licenses"
           New-Item -ItemType Directory -Path $noticeDir -Force | Out-Null
-          $packageRoot = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path $env:USERPROFILE ".nuget\packages" }
-          foreach ($pack in @("microsoft.netcore.app.runtime.win-x64", "microsoft.aspnetcore.app.runtime.win-x64")) {
-            $packDir = Join-Path $packageRoot $pack
-            if (-not (Test-Path $packDir)) { throw "Runtime package not found in NuGet cache: $packDir" }
-            $versionDir = Get-ChildItem $packDir -Directory | Sort-Object { [version]($_.Name -replace '[-+].*$', '') } | Select-Object -Last 1
+          foreach ($pack in @("Microsoft.NETCore.App.Runtime.win-x64", "Microsoft.AspNetCore.App.Runtime.win-x64")) {
+            $entry = $downloads | Where-Object { $_ -and $_.name -eq $pack } | Select-Object -First 1
+            if (-not $entry) { throw "$pack was not resolved by restore (project.assets.json)" }
+            $version = (($entry.version -replace '[\[\]() ]', '') -split ',')[0]
+            $packDir = Join-Path (Join-Path $packageRoot $pack.ToLowerInvariant()) $version
+            if (-not (Test-Path $packDir)) { throw "Runtime package folder not found: $packDir" }
             foreach ($name in @("LICENSE.txt", "THIRD-PARTY-NOTICES.TXT")) {
-              $src = Join-Path $versionDir.FullName $name
-              if (-not (Test-Path $src)) { throw "$name not found in $($versionDir.FullName)" }
+              $src = Join-Path $packDir $name
+              if (-not (Test-Path $src)) { throw "$name not found in $packDir" }
               Copy-Item $src -Destination (Join-Path $noticeDir "$pack-$name") -Force
             }
+            Write-Host "Included notices for $pack $version"
           }
 
           $zipPath = Join-Path "artifacts" "$dirName.zip"
@@ -210,8 +222,13 @@ jobs:
               throw "Required file missing from staged release: $path"
             }
           }
-          if (-not (Get-ChildItem (Join-Path $stageDir "third-party-licenses") -File -ErrorAction SilentlyContinue)) {
-            throw "No license notices found under third-party-licenses in staged release"
+          foreach ($pack in @("Microsoft.NETCore.App.Runtime.win-x64", "Microsoft.AspNetCore.App.Runtime.win-x64")) {
+            foreach ($name in @("LICENSE.txt", "THIRD-PARTY-NOTICES.TXT")) {
+              $path = Join-Path $stageDir "third-party-licenses\$pack-$name"
+              if (-not (Test-Path $path)) {
+                throw "Runtime notice missing from staged release: $path"
+              }
+            }
           }
 
       # ── Create GitHub Release ─────────────────────────────────────────────────
